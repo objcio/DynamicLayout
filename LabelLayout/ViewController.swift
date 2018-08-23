@@ -17,7 +17,7 @@ enum Width {
 enum Element {
     case view(UIView)
     case space
-    //case inlineBox(Layout, width: CGFloat)
+    case inlineBox(Layout)
     
     func width(_ width: Width, availableWidth: CGFloat) -> Line.BlockWidth {
         switch width {
@@ -27,6 +27,8 @@ enum Element {
             return .flexible(min: x)
         case .basedOnContents:
             switch self {
+            case let .inlineBox(layout):
+                return .absolute(layout.computeLines(containerWidth: availableWidth, startingAt: 0)?.map { $0.minWidth }.max() ?? 0)
             case let .view(view):
                 let size = view.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
                 return .absolute(size.width)
@@ -46,6 +48,7 @@ indirect enum Layout {
 
 struct Line {
     enum Block {
+        case inlineBox([Line])
         case view(UIView)
         case space
     }
@@ -98,22 +101,32 @@ extension Line.BlockWidth {
 extension Layout {
     func apply(containerWidth: CGFloat) -> Set<UIView> {
         let lines = computeLines(containerWidth: containerWidth, startingAt: 0) ?? []
+        return lines.apply(containerWidth: containerWidth, origin: .zero)
+    }
+}
+
+extension Array where Element == Line {
+    func apply(containerWidth: CGFloat, origin: CGPoint) -> Set<UIView> {
         var result: Set<UIView> = []
-        var y: CGFloat = 0
-        for line in lines {
+        var y: CGFloat = origin.y
+        for line in self {
             y += line.leadingSpace
             let flexibleSpace = (containerWidth - line.minWidth) / CGFloat(line.numberOfFlexibleElements)
-            var x: CGFloat = 0
+            var x: CGFloat = origin.x
             var lineHeight: CGFloat = 0
+            
             for (block, width) in line.elements {
+                let origin = CGPoint(x: x, y: y)
                 let absWidth = width.absolute(flexibleSpace: flexibleSpace)
                 switch block {
                 case let .view(view):
                     let height = view.sizeThatFits(CGSize(width: absWidth, height: .greatestFiniteMagnitude)).height
-                    let frame = CGRect(origin: CGPoint(x: x, y: y), size: CGSize(width: absWidth, height: height))
+                    let frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: height))
                     view.frame = frame.integral
-                    lineHeight = max(lineHeight, frame.height)
+                    lineHeight = Swift.max(lineHeight, frame.height)
                     result.insert(view)
+                case .inlineBox(let lines):
+                    result.formUnion(lines.apply(containerWidth: absWidth, origin: origin))
                 case .space:
                     break
                 }
@@ -123,36 +136,42 @@ extension Layout {
         }
         return result
     }
+}
 
-    private func computeLines(containerWidth: CGFloat, startingAt start: CGFloat, cancelOnOverflow: Bool = false) -> [Line]? {
+extension Layout {
+    fileprivate func computeLines(containerWidth: CGFloat, startingAt start: CGFloat, cancelOnOverflow: Bool = false) -> [Line]? {
         var lines: [Line] = [Line(leadingSpace: 0, elements: [])]
         var line: Line {
             get { return lines[lines.endIndex-1] }
             set { lines[lines.endIndex-1] = newValue }
         }
         var el = self
-        var currentX = start
+        var currentWidth = start
         while true {
             switch el {
             case let .element(element, width, next):
-                let blockWidth = element.width(width, availableWidth: containerWidth - currentX)
-                currentX += blockWidth.min
+                let blockWidth = element.width(width, availableWidth: containerWidth - currentWidth)
+                currentWidth += blockWidth.min
                 switch element {
                 case let .view(view):
                     line.elements.append((.view(view), blockWidth))
                 case .space:
                     line.elements.append((.space, blockWidth))
+                case let .inlineBox(layout):
+                    // todo: we compute this twice!
+                    let box = layout.computeLines(containerWidth: containerWidth - currentWidth, startingAt: 0)!
+                    line.elements.append((.inlineBox(box), blockWidth))
                 }
-                if cancelOnOverflow && currentX > containerWidth {
+                if cancelOnOverflow && currentWidth > containerWidth {
                     return nil
                 }
                 el = next
             case let .newline(space, next):
-                currentX = 0
+                currentWidth = 0
                 lines.append(Line(leadingSpace: space, elements: []))
                 el = next
             case let .choice(first, second):
-                if let firstLayout = first.computeLines(containerWidth: containerWidth, startingAt: currentX, cancelOnOverflow: true) {
+                if let firstLayout = first.computeLines(containerWidth: containerWidth, startingAt: currentWidth, cancelOnOverflow: true) {
                     guard let cont = firstLayout.first else { return lines}
                     line.join(cont)
                     lines.append(contentsOf: firstLayout.dropFirst())
@@ -191,9 +210,6 @@ final class LayoutView: UIView {
             addSubview(v)
         }
     }
-}
-
-extension Array where Element: UIView {
 }
 
 extension Array where Element == Layout {
@@ -237,6 +253,10 @@ extension Layout {
     func or(_ other: Layout) -> Layout {
         return .choice(self, other)
     }
+    
+    func inlineBox(width: Width = .basedOnContents) -> Layout {
+        return .element(.inlineBox(self), width, .empty)
+    }
 }
 
 class ViewController: UIViewController {
@@ -267,9 +287,9 @@ class ViewController: UIViewController {
         episodeDuration.font = UIFont.preferredFont(forTextStyle: .body)
         episodeDuration.adjustsFontForContentSizeCategory = true
 
-        let metaLabels = [episodeNumber, episodeDate, episodeDuration].map { $0.layout }
-        let metadata = metaLabels.horizontal(minSpacing: 20).or(metaLabels.vertical(space: 0))
-        let layout = [titleLabel.layout, metadata].vertical(space: 15)
+        let metadata = [episodeDate, episodeDuration].map { $0.layout }.vertical(space: 0)
+        let secondLine: Layout = [episodeNumber.layout, metadata.inlineBox()].horizontal(minSpacing: 20)
+        let layout = [titleLabel.layout, secondLine.or([episodeNumber.layout, metadata].vertical())].vertical(space: 15)
 
         let container = LayoutView(layout)
         container.translatesAutoresizingMaskIntoConstraints = false
