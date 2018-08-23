@@ -29,13 +29,14 @@ extension Line {
 }
 
 extension Layout {
-    func apply(containerWidth: CGFloat) {
+    func apply(containerWidth: CGFloat) -> Set<UIView> {
         let lines = computeLines(containerWidth: containerWidth, startingAt: .zero) ?? []
-        for line in lines {
-            for (view, frame) in line.elements {
-                view.frame = frame
-            }
+        var result: Set<UIView> = []
+        for (view, frame) in lines.flatMap({ $0.elements }) {
+            view.frame = frame
+            result.insert(view)
         }
+        return result
     }
 
     private func computeLines(containerWidth: CGFloat, startingAt start: CGPoint, cancelOnOverflow: Bool = false) -> [Line]? {
@@ -78,10 +79,10 @@ extension Layout {
 }
 
 final class LayoutView: UIView {
-    let layout: Layout
+    private let _layout: Layout
     
     init(_ layout: Layout) {
-        self.layout = layout
+        self._layout = layout
         super.init(frame: .zero)
         
         NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: NSNotification.Name.UIContentSizeCategoryDidChange, object: nil)
@@ -92,7 +93,60 @@ final class LayoutView: UIView {
     }
     
     override func layoutSubviews() {
-        layout.apply(containerWidth: bounds.width)
+        let views = Set(_layout.apply(containerWidth: bounds.width))
+        let sub = Set(subviews)
+        for v in sub.subtracting(views) {
+            v.removeFromSuperview()
+        }
+        for v in views.subtracting(sub) {
+            addSubview(v)
+        }
+    }
+}
+
+extension Array where Element: UIView {
+    func horizontal() -> Layout {
+        var result = Layout.empty
+        for e in reversed() {
+            result = .view(e, result)
+        }
+        return result
+    }
+    func vertical() -> Layout {
+        var result = Layout.empty
+        for e in reversed() {
+            result = .view(e, .newline(result))
+        }
+        return result
+    }
+    
+    func horizontalOrVertical() -> Layout {
+        return .choice(horizontal(), vertical())
+    }
+}
+
+extension Array where Element == Layout {
+    func vertical() -> Layout {
+        var result = Layout.empty
+        for e in reversed() {
+            result = e + .newline(result)
+        }
+        return result
+    }
+}
+
+func +(lhs: Layout, rhs: Layout) -> Layout {
+    switch lhs {
+    case let .choice(l, r): return .choice(l + rhs, r + rhs)
+    case .empty: return rhs
+    case let .newline(x): return .newline(x + rhs)
+    case let .view(v, x): return .view(v, x + rhs)
+    }
+}
+
+extension UIView {
+    var layout: Layout {
+        return .view(self, .empty)
     }
 }
 
@@ -118,15 +172,16 @@ class ViewController: UIViewController {
         episodeDate.text = "September 23"
         episodeDate.font = UIFont.preferredFont(forTextStyle: .body)
         episodeDate.adjustsFontForContentSizeCategory = true
+        
+        let episodeDuration = UILabel()
+        episodeDuration.text = "23 min"
+        episodeDuration.font = UIFont.preferredFont(forTextStyle: .body)
+        episodeDuration.adjustsFontForContentSizeCategory = true
 
-        let layout = Layout.view(titleLabel, .newline(.choice(.view(episodeNumber, .view(episodeDate, .empty)), .view(episodeNumber, .newline(.view(episodeDate, .empty))))))
+        let layout = [titleLabel.layout, [episodeNumber, episodeDate, episodeDuration].horizontalOrVertical()].vertical()
 
         let container = LayoutView(layout)
         container.translatesAutoresizingMaskIntoConstraints = false
-        
-        container.addSubview(titleLabel)
-        container.addSubview(episodeNumber)
-        container.addSubview(episodeDate)
         view.addSubview(container)
         
         NSLayoutConstraint.activate([
