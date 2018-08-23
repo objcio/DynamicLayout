@@ -1,0 +1,11 @@
+- Device Size
+- iPad: multi-tasking
+- portrait/landscape
+- accessibility font size
+
+apple:
+
+https://developer.apple.com/documentation/uikit/uicontentsizecategory
+regular: iPhone 4 -> half split screen landscape?
+uitraitcollection:
+	https://useyourloaf.com/blog/size-classes/
