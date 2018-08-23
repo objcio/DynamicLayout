@@ -8,68 +8,157 @@
 
 import UIKit
 
+enum Width {
+    case basedOnContents
+    case flexible(min: CGFloat)
+    case absolute(CGFloat)
+}
+
+enum Element {
+    case view(UIView)
+    case space
+    //case inlineBox(Layout, width: CGFloat)
+    
+    func width(_ width: Width, availableWidth: CGFloat) -> Line.BlockWidth {
+        switch width {
+        case let .absolute(x):
+            return .absolute(x)
+        case let .flexible(min: x):
+            return .flexible(min: x)
+        case .basedOnContents:
+            switch self {
+            case let .view(view):
+                let size = view.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
+                return .absolute(size.width)
+            case .space:
+                return .absolute(0)
+            }
+        }
+    }
+}
+
 indirect enum Layout {
-    case view(UIView, Layout)
-    case newline(Layout)
+    case element(Element, Width, Layout)
+    case newline(space: CGFloat, Layout)
     case choice(Layout, Layout)
     case empty
 }
 
 struct Line {
-    var elements: [(UIView, CGRect)]
-    var height: CGFloat {
-        return elements.map { $0.1.height }.max() ?? 0
+    enum Block {
+        case view(UIView)
+        case space
     }
-}
+    
+    enum BlockWidth {
+        case absolute(CGFloat)
+        case flexible(min: CGFloat)
+        
+        
+        var isFlexible: Bool {
+            guard case .flexible = self else { return false }
+            return true
+        }
+        
+        var min: CGFloat {
+            switch self {
+            case let .absolute(w): return w
+            case let .flexible(w): return w
+            }
+        }
+    }
+        
+    var leadingSpace: CGFloat
+    var elements: [(Block, BlockWidth)]
 
-extension Line {
+    var minWidth: CGFloat {
+        return elements.reduce(0) { result, el in
+            result + el.1.min
+        }
+    }
+
+    var numberOfFlexibleElements: Int {
+        return elements.lazy.filter { $0.1.isFlexible }.count
+    }
+    
     mutating func join(_ other: Line) {
         elements += other.elements
     }
 }
 
+extension Line.BlockWidth {
+    func absolute(flexibleSpace: CGFloat) -> CGFloat {
+        switch self {
+        case let .absolute(w): return w
+        case let .flexible(min: min): return min + flexibleSpace
+        }
+    }
+}
+
 extension Layout {
     func apply(containerWidth: CGFloat) -> Set<UIView> {
-        let lines = computeLines(containerWidth: containerWidth, startingAt: .zero) ?? []
+        let lines = computeLines(containerWidth: containerWidth, startingAt: 0) ?? []
         var result: Set<UIView> = []
-        for (view, frame) in lines.flatMap({ $0.elements }) {
-            view.frame = frame
-            result.insert(view)
+        var y: CGFloat = 0
+        for line in lines {
+            y += line.leadingSpace
+            let flexibleSpace = (containerWidth - line.minWidth) / CGFloat(line.numberOfFlexibleElements)
+            var x: CGFloat = 0
+            var lineHeight: CGFloat = 0
+            for (block, width) in line.elements {
+                let absWidth = width.absolute(flexibleSpace: flexibleSpace)
+                switch block {
+                case let .view(view):
+                    let height = view.sizeThatFits(CGSize(width: absWidth, height: .greatestFiniteMagnitude)).height
+                    let frame = CGRect(origin: CGPoint(x: x, y: y), size: CGSize(width: absWidth, height: height))
+                    view.frame = frame.integral
+                    lineHeight = max(lineHeight, frame.height)
+                    result.insert(view)
+                case .space:
+                    break
+                }
+                x += absWidth
+            }
+            y += lineHeight
         }
         return result
     }
 
-    private func computeLines(containerWidth: CGFloat, startingAt start: CGPoint, cancelOnOverflow: Bool = false) -> [Line]? {
-        var lines: [Line] = [Line(elements: [])]
+    private func computeLines(containerWidth: CGFloat, startingAt start: CGFloat, cancelOnOverflow: Bool = false) -> [Line]? {
+        var lines: [Line] = [Line(leadingSpace: 0, elements: [])]
         var line: Line {
             get { return lines[lines.endIndex-1] }
             set { lines[lines.endIndex-1] = newValue }
         }
-        var current = self
-        var p = start
+        var el = self
+        var currentX = start
         while true {
-            switch current {
-            case let .view(view, next):
-                let size = view.sizeThatFits(CGSize(width: containerWidth - p.x, height: .greatestFiniteMagnitude))
-                line.elements.append((view, CGRect(origin: p, size: size)))
-                p.x += size.width
-                if cancelOnOverflow && p.x > containerWidth {
+            switch el {
+            case let .element(element, width, next):
+                let blockWidth = element.width(width, availableWidth: containerWidth - currentX)
+                currentX += blockWidth.min
+                switch element {
+                case let .view(view):
+                    line.elements.append((.view(view), blockWidth))
+                case .space:
+                    line.elements.append((.space, blockWidth))
+                }
+                if cancelOnOverflow && currentX > containerWidth {
                     return nil
                 }
-                current = next
-            case let .newline(next):
-                p.x = 0
-                p.y += line.height
-                lines.append(Line(elements: []))
-                current = next
+                el = next
+            case let .newline(space, next):
+                currentX = 0
+                lines.append(Line(leadingSpace: space, elements: []))
+                el = next
             case let .choice(first, second):
-                if let firstLayout = first.computeLines(containerWidth: containerWidth, startingAt: p, cancelOnOverflow: true) {
+                if let firstLayout = first.computeLines(containerWidth: containerWidth, startingAt: currentX, cancelOnOverflow: true) {
                     guard let cont = firstLayout.first else { return lines}
                     line.join(cont)
                     lines.append(contentsOf: firstLayout.dropFirst())
                     return lines
                 } else {
-                    current = second
+                    el = second
                 }
             case .empty:
                 return lines
@@ -105,31 +194,25 @@ final class LayoutView: UIView {
 }
 
 extension Array where Element: UIView {
-    func horizontal() -> Layout {
-        var result = Layout.empty
-        for e in reversed() {
-            result = .view(e, result)
-        }
-        return result
-    }
-    func vertical() -> Layout {
-        var result = Layout.empty
-        for e in reversed() {
-            result = .view(e, .newline(result))
-        }
-        return result
-    }
-    
-    func horizontalOrVertical() -> Layout {
-        return .choice(horizontal(), vertical())
-    }
 }
 
 extension Array where Element == Layout {
-    func vertical() -> Layout {
+    func horizontal(minSpacing: CGFloat? = nil) -> Layout {
+        guard let v = last else { return .empty }
+        var result = v
+        for e in reversed().dropFirst() {
+            if let s = minSpacing {
+                result = .element(.space, .flexible(min: s), result)
+            }
+            result = e + result
+        }
+        return result
+    }
+
+    func vertical(space: CGFloat = 0) -> Layout {
         var result = Layout.empty
         for e in reversed() {
-            result = e + .newline(result)
+            result = e + .newline(space: space, result)
         }
         return result
     }
@@ -139,14 +222,20 @@ func +(lhs: Layout, rhs: Layout) -> Layout {
     switch lhs {
     case let .choice(l, r): return .choice(l + rhs, r + rhs)
     case .empty: return rhs
-    case let .newline(x): return .newline(x + rhs)
-    case let .view(v, x): return .view(v, x + rhs)
+    case let .newline(s,x): return .newline(space: s, x + rhs)
+    case let .element(v, w, x): return .element(v, w, x + rhs)
     }
 }
 
 extension UIView {
     var layout: Layout {
-        return .view(self, .empty)
+        return .element(.view(self), .basedOnContents, .empty)
+    }
+}
+
+extension Layout {
+    func or(_ other: Layout) -> Layout {
+        return .choice(self, other)
     }
 }
 
@@ -178,7 +267,9 @@ class ViewController: UIViewController {
         episodeDuration.font = UIFont.preferredFont(forTextStyle: .body)
         episodeDuration.adjustsFontForContentSizeCategory = true
 
-        let layout = [titleLabel.layout, [episodeNumber, episodeDate, episodeDuration].horizontalOrVertical()].vertical()
+        let metaLabels = [episodeNumber, episodeDate, episodeDuration].map { $0.layout }
+        let metadata = metaLabels.horizontal(minSpacing: 20).or(metaLabels.vertical(space: 0))
+        let layout = [titleLabel.layout, metadata].vertical(space: 15)
 
         let container = LayoutView(layout)
         container.translatesAutoresizingMaskIntoConstraints = false
