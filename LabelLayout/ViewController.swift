@@ -14,11 +14,6 @@ enum Width {
     case absolute(CGFloat)
 }
 
-extension UIEdgeInsets {
-    var width: CGFloat { return left + right }
-    var height: CGFloat { return top + bottom }
-}
-
 enum Element {
     case view(UIView)
     case space
@@ -103,13 +98,6 @@ struct Line {
     
     mutating func join(_ other: Line) {
         elements += other.elements
-    }
-}
-
-
-extension Sequence where Element: UIView {
-    var maxY: CGFloat {
-        return map { $0.frame.maxY }.max() ?? 0
     }
 }
 
@@ -228,6 +216,17 @@ extension UIView {
     }
 }
 
+extension Sequence where Element: UIView {
+    var maxY: CGFloat {
+        return map { $0.frame.maxY }.max() ?? 0
+    }
+}
+
+extension UIEdgeInsets {
+    var width: CGFloat { return left + right }
+    var height: CGFloat { return top + bottom }
+}
+
 final class LayoutView: UIView {
     private let _layout: Layout
     
@@ -294,44 +293,33 @@ extension Layout {
     }
 }
 
+func label(text: String, size: UIFontTextStyle, multiline: Bool = false) -> UILabel {
+    let label = UILabel()
+    label.font = UIFont.preferredFont(forTextStyle: size)
+    label.text = text
+    label.adjustsFontForContentSizeCategory = true
+    if multiline {
+        label.numberOfLines = 0
+    }
+    return label
+}
+
 class ViewController: UIViewController {
     var token: Any?
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let titleLabel = UILabel()
-        titleLabel.font = UIFont.preferredFont(forTextStyle: .headline)
-        titleLabel.text = "Building a Layout Library"
-        titleLabel.adjustsFontForContentSizeCategory = true
-        titleLabel.numberOfLines = 0
-        
-        let episodeNumber = UILabel()
-        episodeNumber.text = "Episode 123"
-        episodeNumber.font = UIFont.preferredFont(forTextStyle: .caption1)
-        episodeNumber.adjustsFontForContentSizeCategory = true
+        let titleLabel = label(text: "Building a Layout Library", size: .headline, multiline: true)
+        let episodeNumber = label(text: "Episode 123", size: .caption1)
+        let episodeDate = label(text: "September 23", size: .caption1)
+        let episodeDuration = label(text: "23 min", size: .caption1)
+        let synopsis = label(text: "We start building a descriptive layout library that can be used to support the wide range of screen widths and font size options available on iOS today.", size: .body, multiline: true)
 
-        
-        let episodeDate = UILabel()
-        episodeDate.text = "September 23"
-        episodeDate.font = UIFont.preferredFont(forTextStyle: .caption1)
-        episodeDate.adjustsFontForContentSizeCategory = true
-        
-        let episodeDuration = UILabel()
-        episodeDuration.text = "23 min"
-        episodeDuration.font = UIFont.preferredFont(forTextStyle: .caption1)
-        episodeDuration.adjustsFontForContentSizeCategory = true
-        
         let roundedBox = UIView()
         roundedBox.layer.cornerRadius = 5
         roundedBox.backgroundColor = .lightGray
         
-        let synopsis = UILabel()
-        synopsis.text = "We start building a descriptive layout library that can be used to support the wide range of screen widths and font size options available on iOS today."
-        synopsis.font = UIFont.preferredFont(forTextStyle: .body)
-        synopsis.numberOfLines = 0
-        synopsis.adjustsFontForContentSizeCategory = true
-
         let metadata = [episodeDate, episodeDuration].map { $0.layout }.vertical(space: 0)
         let secondLine: Layout = [episodeNumber.layout, metadata.inlineBox(wrapper: roundedBox)].horizontal(minSpacing: 20)
         let layout = [titleLabel.layout, secondLine.or([episodeNumber.layout, metadata].vertical()), synopsis.layout].vertical(space: 15)
