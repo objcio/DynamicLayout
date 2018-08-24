@@ -113,6 +113,36 @@ extension Sequence where Element: UIView {
     }
 }
 
+extension Line.Block {
+    func apply(at origin: CGPoint, absWidth: CGFloat) -> (Set<UIView>, height: CGFloat) {
+        var result: Set<UIView> = []
+        let height: CGFloat
+        switch self {
+        case let .view(view):
+            height = view.sizeThatFits(CGSize(width: absWidth, height: .greatestFiniteMagnitude)).height
+            let frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: height))
+            view.frame = frame.integral
+            result.insert(view)
+        case let .inlineBox(nil, lines):
+            let nested = lines.apply(containerWidth: absWidth, origin: origin)
+            result.formUnion(nested)
+            height = nested.maxY - origin.y
+        case let .inlineBox(wrapper?, lines):
+            let width = absWidth - wrapper.layoutMargins.width
+            let nestedOrigin = CGPoint(x: wrapper.layoutMargins.left, y: wrapper.layoutMargins.top)
+            let subviews = lines.apply(containerWidth: absWidth - width, origin: nestedOrigin)
+            wrapper.frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: subviews.maxY + wrapper.layoutMargins.height))
+            wrapper.setSubviews(subviews)
+            result.insert(wrapper)
+            height = wrapper.frame.height
+        case .space:
+            height = 0
+            break
+        }
+        return (result, height)
+    }
+}
+
 extension Array where Element == Line {
     func apply(containerWidth: CGFloat, origin: CGPoint) -> Set<UIView> {
         var result: Set<UIView> = []
@@ -126,28 +156,9 @@ extension Array where Element == Line {
             for (block, width) in line.elements {
                 let origin = CGPoint(x: x, y: y)
                 let absWidth = width.absolute(flexibleSpace: flexibleSpace)
-                switch block {
-                case let .view(view):
-                    let height = view.sizeThatFits(CGSize(width: absWidth, height: .greatestFiniteMagnitude)).height
-                    let frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: height))
-                    view.frame = frame.integral
-                    lineHeight = Swift.max(lineHeight, frame.height)
-                    result.insert(view)
-                case let .inlineBox(nil, lines):
-                    let nested = lines.apply(containerWidth: absWidth, origin: origin)
-                    result.formUnion(nested)
-                    lineHeight = Swift.max(lineHeight, nested.maxY - y)
-                case let .inlineBox(wrapper?, lines):
-                    let width = absWidth - wrapper.layoutMargins.width
-                    let nestedOrigin = CGPoint(x: wrapper.layoutMargins.left, y: wrapper.layoutMargins.top)
-                    let subviews = lines.apply(containerWidth: absWidth - width, origin: nestedOrigin)
-                    wrapper.frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: subviews.maxY + wrapper.layoutMargins.height))
-                    wrapper.setSubviews(subviews)
-                    result.insert(wrapper)
-                    lineHeight = Swift.max(lineHeight, wrapper.frame.height)
-                case .space:
-                    break
-                }
+                let (views, height) = block.apply(at: origin, absWidth: absWidth)
+                result.formUnion(views)
+                lineHeight = Swift.max(lineHeight, height)
                 x += absWidth
             }
             y += lineHeight
