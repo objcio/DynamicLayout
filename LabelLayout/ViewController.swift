@@ -17,7 +17,7 @@ enum Width {
 enum Element {
     case view(UIView)
     case space
-    case inlineBox(Layout)
+    case inlineBox(wrapper: UIView?, Layout)
     
     func width(_ width: Width, availableWidth: CGFloat) -> Line.BlockWidth {
         switch width {
@@ -27,7 +27,7 @@ enum Element {
             return .flexible(min: x)
         case .basedOnContents:
             switch self {
-            case let .inlineBox(layout):
+            case let .inlineBox(_, layout):
                 return .absolute(layout.computeLines(containerWidth: availableWidth, startingAt: 0)?.map { $0.minWidth }.max() ?? 0)
             case let .view(view):
                 let size = view.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
@@ -48,7 +48,7 @@ indirect enum Layout {
 
 struct Line {
     enum Block {
-        case inlineBox([Line])
+        case inlineBox(wrapper: UIView?, [Line])
         case view(UIView)
         case space
     }
@@ -101,12 +101,12 @@ extension Line.BlockWidth {
 extension Layout {
     func apply(containerWidth: CGFloat) -> Set<UIView> {
         let lines = computeLines(containerWidth: containerWidth, startingAt: 0) ?? []
-        return lines.apply(containerWidth: containerWidth, origin: .zero)
+        return lines.apply(containerWidth: containerWidth, origin: .zero).0
     }
 }
 
 extension Array where Element == Line {
-    func apply(containerWidth: CGFloat, origin: CGPoint) -> Set<UIView> {
+    func apply(containerWidth: CGFloat, origin: CGPoint) -> (Set<UIView>, height: CGFloat) {
         var result: Set<UIView> = []
         var y: CGFloat = origin.y
         for line in self {
@@ -125,8 +125,15 @@ extension Array where Element == Line {
                     view.frame = frame.integral
                     lineHeight = Swift.max(lineHeight, frame.height)
                     result.insert(view)
-                case .inlineBox(let lines):
-                    result.formUnion(lines.apply(containerWidth: absWidth, origin: origin))
+                case let .inlineBox(wrapper, lines):
+                    if let w = wrapper {
+                        let (subviews, height) = lines.apply(containerWidth: absWidth, origin: .zero)
+                        w.frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: height))
+                        w.setSubviews(subviews)
+                        result.insert(w)
+                    } else {
+                    	result.formUnion(lines.apply(containerWidth: absWidth, origin: origin).0)
+                    }
                 case .space:
                     break
                 }
@@ -134,7 +141,7 @@ extension Array where Element == Line {
             }
             y += lineHeight
         }
-        return result
+        return (result, y)
     }
 }
 
@@ -157,10 +164,10 @@ extension Layout {
                     line.elements.append((.view(view), blockWidth))
                 case .space:
                     line.elements.append((.space, blockWidth))
-                case let .inlineBox(layout):
+                case let .inlineBox(wrapper, layout):
                     // todo: we compute this twice!
                     let box = layout.computeLines(containerWidth: containerWidth - currentWidth, startingAt: 0)!
-                    line.elements.append((.inlineBox(box), blockWidth))
+                    line.elements.append((.inlineBox(wrapper: wrapper, box), blockWidth))
                 }
                 if cancelOnOverflow && currentWidth > containerWidth {
                     return nil
@@ -186,6 +193,19 @@ extension Layout {
     }
 }
 
+extension UIView {
+    func setSubviews<S: Sequence>(_ other: S) where S.Element == UIView {
+        let views = Set(other)
+        let sub = Set(subviews)
+        for v in sub.subtracting(views) {
+            v.removeFromSuperview()
+        }
+        for v in views.subtracting(sub) {
+            addSubview(v)
+        }
+    }
+}
+
 final class LayoutView: UIView {
     private let _layout: Layout
     
@@ -201,14 +221,7 @@ final class LayoutView: UIView {
     }
     
     override func layoutSubviews() {
-        let views = Set(_layout.apply(containerWidth: bounds.width))
-        let sub = Set(subviews)
-        for v in sub.subtracting(views) {
-            v.removeFromSuperview()
-        }
-        for v in views.subtracting(sub) {
-            addSubview(v)
-        }
+        setSubviews(_layout.apply(containerWidth: bounds.width))
     }
 }
 
@@ -254,8 +267,8 @@ extension Layout {
         return .choice(self, other)
     }
     
-    func inlineBox(width: Width = .basedOnContents) -> Layout {
-        return .element(.inlineBox(self), width, .empty)
+    func inlineBox(width: Width = .basedOnContents, wrapper: UIView? = nil) -> Layout {
+        return .element(.inlineBox(wrapper: wrapper, self), width, .empty)
     }
 }
 
@@ -286,9 +299,13 @@ class ViewController: UIViewController {
         episodeDuration.text = "23 min"
         episodeDuration.font = UIFont.preferredFont(forTextStyle: .body)
         episodeDuration.adjustsFontForContentSizeCategory = true
+        
+        let roundedBox = UIView()
+        roundedBox.layer.cornerRadius = 5
+        roundedBox.backgroundColor = .lightGray
 
         let metadata = [episodeDate, episodeDuration].map { $0.layout }.vertical(space: 0)
-        let secondLine: Layout = [episodeNumber.layout, metadata.inlineBox()].horizontal(minSpacing: 20)
+        let secondLine: Layout = [episodeNumber.layout, metadata.inlineBox(wrapper: roundedBox)].horizontal(minSpacing: 20)
         let layout = [titleLabel.layout, secondLine.or([episodeNumber.layout, metadata].vertical())].vertical(space: 15)
 
         let container = LayoutView(layout)
