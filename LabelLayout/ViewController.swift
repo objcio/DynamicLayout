@@ -132,15 +132,16 @@ extension Array where Element == Line {
                     lineHeight = Swift.max(lineHeight, frame.height)
                     result.insert(view)
                 case let .inlineBox(wrapper, insets, lines):
-                    let nestedOrigin = CGPoint(x: insets.left, y: insets.top)
                     let width = absWidth - insets.width
                     if let w = wrapper {
+                        let nestedOrigin = CGPoint(x: insets.left, y: insets.top)
                         let (subviews, height) = lines.apply(containerWidth: absWidth - width, origin: nestedOrigin)
                         w.frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: height + insets.height))
                         w.setSubviews(subviews)
                         result.insert(w)
                         lineHeight = Swift.max(lineHeight, w.frame.height)
                     } else {
+                        let nestedOrigin = CGPoint(x: origin.x + insets.left, y: origin.y + insets.top)
                         let nested = lines.apply(containerWidth: width, origin: nestedOrigin)
                     	result.formUnion(nested.0)
                         lineHeight = Swift.max(lineHeight, nested.maxY-y)
@@ -321,7 +322,7 @@ class ViewController: UIViewController {
         test.adjustsFontForContentSizeCategory = true
 
         let metadata = [episodeDate, episodeDuration].map { $0.layout }.vertical(space: 0)
-        let secondLine: Layout = [episodeNumber.layout, metadata.inlineBox(insets: UIEdgeInsetsMake(15, 15, 15, 15), wrapper: roundedBox)].horizontal(minSpacing: 20)
+        let secondLine: Layout = [episodeNumber.layout, metadata.inlineBox(insets: UIEdgeInsetsMake(15, 15, 15, 15), wrapper: nil)].horizontal(minSpacing: 20)
         let layout = [titleLabel.layout, secondLine.or([episodeNumber.layout, metadata].vertical()), test.layout].vertical(space: 15)
 
         let container = LayoutView(layout)
