@@ -16,70 +16,95 @@ indirect enum Layout {
     case empty
 }
 
-extension Layout {
-    func apply(containerWidth: CGFloat) -> Set<UIView> {
-        var el = self
-        var p = CGPoint.zero
-        var lineHeight: CGFloat = 0
-        var result: Set<UIView> = []
-        while true {
-            switch el {
-            case let .view(view, next):
-                let size = view.sizeThatFits(CGSize(width: containerWidth - p.x, height: .greatestFiniteMagnitude))
-                view.frame = CGRect(origin: p, size: size).integral
-                p.x += size.width
-                lineHeight = max(lineHeight, size.height)
-                result.insert(view)
-                el = next
-            case let .space(space, next):
-                p.x += space
-                el = next
-            case let .newline(space, next):
-                p.x = 0
-                p.y += lineHeight + space
-                lineHeight = 0
-                el = next
-            case let .choice(first, second):
-                if first.fits(containerWidth: containerWidth - p.x) {
-                    el = first
-                } else {
-                    el = second
-                }
-            case .empty:
-                return result
-            }
+struct Line {
+    enum Element {
+        case view(UIView, CGFloat)
+        case space(CGFloat)
+    }
+    
+    var elements: [Element]
+    var topSpace: CGFloat
+    
+    var width: CGFloat {
+        return elements.reduce(0) { $0 + $1.width }
+    }
+}
+
+extension Line.Element {
+    var width: CGFloat {
+        switch self {
+        case let .view(_, w): return w
+        case let .space(w): return w
         }
     }
+}
 
-    func fits(containerWidth: CGFloat) -> Bool {
+extension Layout {
+    func apply(containerWidth: CGFloat) -> Set<UIView> {
+        let lines = computeLines(containerWidth: containerWidth)
+        
+        var p = CGPoint.zero
+        var result: Set<UIView> = []
+        for line in lines {
+            p.y += line.topSpace
+            var lineHeight: CGFloat = 0
+            for el in line.elements {
+                switch el {
+                case let .view(view, width):
+                    let size = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+                    view.frame = CGRect(origin: p, size: CGSize(width: width, height: size.height)).integral
+                    p.x += width
+                    lineHeight = max(lineHeight, size.height)
+                    result.insert(view)
+                case let .space(width):
+                    p.x += width
+                }
+            }
+            p.x = 0
+            p.y += lineHeight
+        }
+        return result
+    }
+
+    func computeLines(containerWidth: CGFloat, start: CGFloat = 0) -> [Line] {
+        var result: [Line] = []
+        var line = Line(elements: [], topSpace: 0)
         var el = self
-        var x: CGFloat = 0
+        var x = start
         while true {
             switch el {
             case let .view(view, next):
                 let size = view.sizeThatFits(CGSize(width: containerWidth - x, height: .greatestFiniteMagnitude))
                 x += size.width
-                if x >= containerWidth {
-                    return false
-                }
+                line.elements.append(.view(view, size.width))
                 el = next
             case let .space(space, next):
                 x += space
+                line.elements.append(.space(space))
                 el = next
-            case let .newline(_, next):
+            case let .newline(space, next):
                 x = 0
+                result.append(line)
+                line = Line(elements: [], topSpace: space)
                 el = next
             case let .choice(first, second):
-                if first.fits(containerWidth: containerWidth - x) {
-                    el = first
+                let lines = first.computeLines(containerWidth: containerWidth, start: x)
+                let tooWide = lines.contains { $0.width >= containerWidth }
+                if !tooWide {
+                    line.elements.append(contentsOf: lines[0].elements)
+                    result.append(line)
+                    result.append(contentsOf: lines.dropFirst())
+                    return result
                 } else {
                     el = second
                 }
             case .empty:
-                return true
+                result.append(line)
+                return result
             }
         }
     }
+
 }
 
 extension UIView {
