@@ -14,10 +14,15 @@ enum Width {
     case absolute(CGFloat)
 }
 
+extension UIEdgeInsets {
+    var width: CGFloat { return left + right }
+    var height: CGFloat { return top + bottom }
+}
+
 enum Element {
     case view(UIView)
     case space
-    case inlineBox(wrapper: UIView?, Layout)
+    case inlineBox(wrapper: UIView?, insets: UIEdgeInsets, Layout)
     
     func width(_ width: Width, availableWidth: CGFloat) -> Line.BlockWidth {
         switch width {
@@ -27,8 +32,9 @@ enum Element {
             return .flexible(min: x)
         case .basedOnContents:
             switch self {
-            case let .inlineBox(_, layout):
-                return .absolute(layout.computeLines(containerWidth: availableWidth, startingAt: 0)?.map { $0.minWidth }.max() ?? 0)
+            case let .inlineBox(_, insets, layout):
+                let contentWidth = layout.computeLines(containerWidth: availableWidth, startingAt: 0)?.map { $0.minWidth }.max() ?? 0
+                return .absolute(contentWidth + insets.width)
             case let .view(view):
                 let size = view.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
                 return .absolute(size.width)
@@ -48,7 +54,7 @@ indirect enum Layout {
 
 struct Line {
     enum Block {
-        case inlineBox(wrapper: UIView?, [Line])
+        case inlineBox(wrapper: UIView?, insets: UIEdgeInsets, [Line])
         case view(UIView)
         case space
     }
@@ -106,7 +112,7 @@ extension Layout {
 }
 
 extension Array where Element == Line {
-    func apply(containerWidth: CGFloat, origin: CGPoint) -> (Set<UIView>, height: CGFloat) {
+    func apply(containerWidth: CGFloat, origin: CGPoint) -> (Set<UIView>, maxY: CGFloat) {
         var result: Set<UIView> = []
         var y: CGFloat = origin.y
         for line in self {
@@ -125,14 +131,19 @@ extension Array where Element == Line {
                     view.frame = frame.integral
                     lineHeight = Swift.max(lineHeight, frame.height)
                     result.insert(view)
-                case let .inlineBox(wrapper, lines):
+                case let .inlineBox(wrapper, insets, lines):
+                    let nestedOrigin = CGPoint(x: insets.left, y: insets.top)
+                    let width = absWidth - insets.width
                     if let w = wrapper {
-                        let (subviews, height) = lines.apply(containerWidth: absWidth, origin: .zero)
-                        w.frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: height))
+                        let (subviews, height) = lines.apply(containerWidth: absWidth - width, origin: nestedOrigin)
+                        w.frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: height + insets.height))
                         w.setSubviews(subviews)
                         result.insert(w)
+                        lineHeight = Swift.max(lineHeight, w.frame.height)
                     } else {
-                    	result.formUnion(lines.apply(containerWidth: absWidth, origin: origin).0)
+                        let nested = lines.apply(containerWidth: width, origin: nestedOrigin)
+                    	result.formUnion(nested.0)
+                        lineHeight = Swift.max(lineHeight, nested.maxY-y)
                     }
                 case .space:
                     break
@@ -164,10 +175,10 @@ extension Layout {
                     line.elements.append((.view(view), blockWidth))
                 case .space:
                     line.elements.append((.space, blockWidth))
-                case let .inlineBox(wrapper, layout):
+                case let .inlineBox(wrapper, insets, layout):
                     // todo: we compute this twice!
                     let box = layout.computeLines(containerWidth: containerWidth - currentWidth, startingAt: 0)!
-                    line.elements.append((.inlineBox(wrapper: wrapper, box), blockWidth))
+                    line.elements.append((.inlineBox(wrapper: wrapper, insets: insets, box), blockWidth))
                 }
                 if cancelOnOverflow && currentWidth > containerWidth {
                     return nil
@@ -267,8 +278,8 @@ extension Layout {
         return .choice(self, other)
     }
     
-    func inlineBox(width: Width = .basedOnContents, wrapper: UIView? = nil) -> Layout {
-        return .element(.inlineBox(wrapper: wrapper, self), width, .empty)
+    func inlineBox(width: Width = .basedOnContents, insets: UIEdgeInsets = .zero, wrapper: UIView? = nil) -> Layout {
+        return .element(.inlineBox(wrapper: wrapper, insets: insets, self), width, .empty)
     }
 }
 
@@ -303,10 +314,15 @@ class ViewController: UIViewController {
         let roundedBox = UIView()
         roundedBox.layer.cornerRadius = 5
         roundedBox.backgroundColor = .lightGray
+        
+        let test = UILabel()
+        test.text = "HI"
+        test.font = UIFont.preferredFont(forTextStyle: .footnote)
+        test.adjustsFontForContentSizeCategory = true
 
         let metadata = [episodeDate, episodeDuration].map { $0.layout }.vertical(space: 0)
-        let secondLine: Layout = [episodeNumber.layout, metadata.inlineBox(wrapper: roundedBox)].horizontal(minSpacing: 20)
-        let layout = [titleLabel.layout, secondLine.or([episodeNumber.layout, metadata].vertical())].vertical(space: 15)
+        let secondLine: Layout = [episodeNumber.layout, metadata.inlineBox(insets: UIEdgeInsetsMake(15, 15, 15, 15), wrapper: roundedBox)].horizontal(minSpacing: 20)
+        let layout = [titleLabel.layout, secondLine.or([episodeNumber.layout, metadata].vertical()), test.layout].vertical(space: 15)
 
         let container = LayoutView(layout)
         container.translatesAutoresizingMaskIntoConstraints = false
