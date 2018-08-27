@@ -393,7 +393,7 @@ extension Flight {
     var metadataLayout: Layout {
         let items: [Layout] = metaData.map { [label(text: $0, size: .caption2, textColor: .white).layout(), label(text: $1, size: .body, textColor: .white).layout()].vertical().inlineBox() }
         let wrapper = UIView()
-        wrapper.backgroundColor = UIColor.darkGray
+        wrapper.backgroundColor = UIColor(red: 242/255, green: 27/255, blue: 63/255, alpha: 1)
         wrapper.layer.cornerRadius = 5
         assert(items.count == 4)
         let els = items.horizontal(minSpacing: 20).or([items[0...1].horizontal(minSpacing: 20), items[2...3].horizontal(minSpacing: 20)].vertical(space: 20)).or(items.vertical(space: 20))
