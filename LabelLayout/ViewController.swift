@@ -118,7 +118,7 @@ extension Line.Block {
         case let .inlineBox(wrapper?, lines):
             let width = absWidth - wrapper.layoutMargins.width
             let nestedOrigin = CGPoint(x: wrapper.layoutMargins.left, y: wrapper.layoutMargins.top)
-            let subviews = lines.apply(containerWidth: absWidth - width, origin: nestedOrigin)
+            let subviews = lines.apply(containerWidth: width, origin: nestedOrigin)
             wrapper.frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: subviews.maxY + wrapper.layoutMargins.height))
             wrapper.setSubviews(subviews)
             result.insert(wrapper)
