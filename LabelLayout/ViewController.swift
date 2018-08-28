@@ -36,7 +36,8 @@ extension UILabel {
 
 indirect enum Layout {
     case view(UIView, Layout)
-    case newline(Layout)
+    case space(CGFloat, Layout)
+    case newline(space: CGFloat, Layout)
     case choice(Layout, Layout)
     case empty
 }
@@ -57,9 +58,12 @@ extension Layout {
                 lineHeight = max(lineHeight, size.height)
                 origin.x += size.width
                 current = rest
-            case let .newline(rest):
+            case let .space(width, rest):
+                origin.x += width
+                current = rest
+            case let .newline(space, rest):
                 origin.x = 0
-                origin.y += lineHeight
+                origin.y += lineHeight + space
                 lineHeight = 0
                 current = rest
             case let .choice(first, second):
@@ -85,7 +89,11 @@ extension Layout {
                 x += size.width
                 if x >= containerWidth { return false }
                 current = rest
-            case let .newline(rest):
+            case let .space(width, rest):
+                x += width
+                if x >= containerWidth { return false }
+                current = rest
+            case let .newline(_, rest):
                 x = 0
                 current = rest
             case let .choice(first, second):
@@ -102,9 +110,9 @@ extension Layout {
 }
 
 final class LayoutContainer: UIView {
-    let layout: Layout
+    private let _layout: Layout
     init(_ layout: Layout) {
-        self.layout = layout
+        self._layout = layout
         super.init(frame: .zero)
         
         NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: Notification.Name.UIContentSizeCategoryDidChange, object: nil)
@@ -115,8 +123,55 @@ final class LayoutContainer: UIView {
     }
     
     override func layoutSubviews() {
-        let views = layout.apply(containerWidth: bounds.width)
+        let views = _layout.apply(containerWidth: bounds.width)
         setSubviews(views)
+    }
+}
+
+extension Array where Element == Layout {
+    func horizontal(space: CGFloat = 0) -> Layout {
+        guard var result = last else { return .empty }
+        for l in dropLast().reversed() {
+            if space > 0 {
+                result = .space(space, result)
+            }
+            result = l + result
+        }
+        return result
+    }
+    
+    func vertical(space: CGFloat = 0) -> Layout {
+        guard var result = last else { return .empty }
+        for l in dropLast().reversed() {
+            result = l + .newline(space: space, result)
+        }
+        return result
+    }
+}
+
+func +(lhs: Layout, rhs: Layout) -> Layout {
+    switch lhs {
+    case let .view(v, remainder): return .view(v, remainder+rhs)
+    case let .space(w, r):
+        return .space(w, r + rhs)
+    case let .newline(space, r):
+        return .newline(space: space, r + rhs)
+    case let .choice(l, r):
+        return .choice(l + rhs, r + rhs)
+    case .empty:
+        return rhs
+    }
+}
+
+extension UIView {
+    var layout: Layout {
+        return .view(self, .empty)
+    }
+}
+
+extension Layout {
+    func or(_ other: Layout) -> Layout {
+        return .choice(self, other)
     }
 }
 
@@ -128,11 +183,11 @@ class ViewController: UIViewController {
         let episodeNumber = UILabel(text: "Episode 123", size: .body)
         let episodeDate = UILabel(text: "September 23", size: .body)
         
-        let horizontal = Layout.view(episodeNumber, Layout.view(episodeDate, .empty))
-        let vertical = Layout.view(episodeNumber, .newline(Layout.view(episodeDate, .empty)))
-        let layout = Layout.view(titleLabel, .newline(
-            .choice(horizontal, vertical)
-            ))
+        let horizontal: Layout = [episodeNumber.layout, episodeDate.layout].horizontal(space: 20)
+        let vertical = [episodeNumber.layout, episodeDate.layout].vertical()
+        let layout = [
+            titleLabel.layout, horizontal.or(vertical)
+        ].vertical(space: 20)
         
         let container = LayoutContainer(layout)
         container.translatesAutoresizingMaskIntoConstraints = false
