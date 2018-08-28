@@ -361,7 +361,9 @@ struct Flight {
     var boarding: Date
 }
 
-let sample = Flight(origin: Airport(city: "Berlin", code: "TXL", time: Date(timeIntervalSinceNow: -7200)), destination: Airport(city: "Paris", code: "CDG", time: Date()), name: "AF123", terminal: "1", gate: "14", boarding: Date())
+let start: TimeInterval = 3600*7
+let sample = Flight(origin: Airport(city: "Berlin", code: "TXL", time:
+    Date(timeIntervalSince1970: start)), destination: Airport(city: "Paris", code: "CDG", time: Date(timeIntervalSince1970: start + 2*3600)), name: "AF123", terminal: "1", gate: "14", boarding: Date(timeIntervalSince1970: start - 1800))
 
 let formatter: DateFormatter = {
 	let f = DateFormatter()
@@ -441,7 +443,7 @@ class ViewController: UIViewController {
         view.addSubview(container)
         view.backgroundColor = UIColor(white: 0.9, alpha: 1)
 
-        
+        view.layoutMargins = UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         NSLayoutConstraint.activate([
             view.layoutMarginsGuide.topAnchor.constraint(equalTo: container.topAnchor),
             view.layoutMarginsGuide.leadingAnchor.constraint(equalTo: container.leadingAnchor),
