@@ -107,24 +107,25 @@ final class LayoutView: UIView {
     }
 }
 
-func label(text: String, size: UIFontTextStyle, multiline: Bool = false) -> UILabel {
-    let label = UILabel()
-    label.font = UIFont.preferredFont(forTextStyle: size)
-    label.text = text
-    label.adjustsFontForContentSizeCategory = true
-    if multiline {
-        label.numberOfLines = 0
+extension UILabel {
+    convenience init(text: String, size: UIFontTextStyle, multiline: Bool = false) {
+        self.init()
+        font = UIFont.preferredFont(forTextStyle: size)
+        self.text = text
+        adjustsFontForContentSizeCategory = true
+        if multiline {
+            numberOfLines = 0
+        }
     }
-    return label
 }
 
 class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let titleLabel = label(text: "Building a Layout Library", size: .headline, multiline: true)
-        let episodeNumber = label(text: "Episode 123", size: .caption1)
-        let episodeDate = label(text: "September 23", size: .caption1)
+        let titleLabel = UILabel(text: "Building a Layout Library", size: .headline, multiline: true)
+        let episodeNumber = UILabel(text: "Episode 123", size: .caption1)
+        let episodeDate = UILabel(text: "September 23", size: .caption1)
 
         let layout: Layout =
             .view(titleLabel,
