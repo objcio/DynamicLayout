@@ -44,70 +44,97 @@ indirect enum Layout {
 
 extension Layout {
     func apply(containerWidth: CGFloat) -> [UIView] {
+        let lines = computeLines(containerWidth: containerWidth, currentX: 0)
+        var origin = CGPoint.zero
         var result: [UIView] = []
-        var origin: CGPoint = .zero
-        var current: Layout = self
-        var lineHeight: CGFloat = 0
-        while true {
-        switch current {
-            case let .view(v, rest):
-                result.append(v)
-                let availableWidth = containerWidth - origin.x
-                let size = v.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
-                v.frame = CGRect(origin: origin, size: size)
-                lineHeight = max(lineHeight, size.height)
-                origin.x += size.width
-                current = rest
-            case let .space(width, rest):
-                origin.x += width
-                current = rest
-            case let .newline(space, rest):
-                origin.x = 0
-                origin.y += lineHeight + space
-                lineHeight = 0
-                current = rest
-            case let .choice(first, second):
-                if first.fits(currentX: origin.x, containerWidth: containerWidth) {
-                    current = first
-                } else {
-                    current = second
+        for line in lines {
+            origin.x = 0
+            origin.y += line.space
+            var lineHeight: CGFloat = 0
+            for element in line.elements {
+                switch element {
+                case .space(let width):
+                    origin.x += width
+                case let .view(v, size):
+                    result.append(v)
+                    v.frame = CGRect(origin: origin, size: size)
+                    origin.x += size.width
+                    lineHeight = max(lineHeight, size.height)
                 }
-            case .empty:
-                return result
             }
+            origin.y += lineHeight
         }
+        return result
+    }
+}
+
+struct Line {
+    enum Element {
+        case view(UIView, CGSize)
+        case space(CGFloat)
     }
     
-    func fits(currentX: CGFloat, containerWidth: CGFloat) -> Bool {
+    var elements: [Element]
+    var space: CGFloat
+    
+    var width: CGFloat {
+        return elements.reduce(0) { $0 + $1.width }
+    }
+}
+
+extension Line.Element {
+    var width: CGFloat {
+        switch self {
+        case let .view(_, size): return size.width
+        case let .space(width): return width
+        }
+    }
+}
+
+extension Layout {
+    func computeLines(containerWidth: CGFloat, currentX: CGFloat) -> [Line] {
         var x = currentX
         var current: Layout = self
+        var lines: [Line] = []
+        var line: Line = Line(elements: [], space: 0)
         while true {
             switch current {
             case let .view(v, rest):
                 let availableWidth = containerWidth - x
                 let size = v.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
                 x += size.width
-                if x >= containerWidth { return false }
+                line.elements.append(.view(v, size))
+                //if x >= containerWidth { return false }
                 current = rest
             case let .space(width, rest):
                 x += width
-                if x >= containerWidth { return false }
+                //if x >= containerWidth { return false }
+                line.elements.append(.space(width))
                 current = rest
-            case let .newline(_, rest):
+            case let .newline(space, rest):
                 x = 0
+                lines.append(line)
+                line = Line(elements: [], space: space)
                 current = rest
             case let .choice(first, second):
-                if first.fits(currentX: x, containerWidth: containerWidth) {
-                    return true
-                } else {
+                var firstLines = first.computeLines(containerWidth: containerWidth, currentX: x)
+                firstLines[0].elements.insert(contentsOf: line.elements, at: 0)
+                firstLines[0].space += line.space
+                let tooWide = firstLines.contains { $0.width >= containerWidth }
+                if tooWide {
                     current = second
+                } else {
+                    return lines + firstLines
                 }
             case .empty:
-                return true
+                lines.append(line)
+                return lines
             }
         }
+
     }
 }
+
 
 final class LayoutContainer: UIView {
     private let _layout: Layout
