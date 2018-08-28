@@ -64,7 +64,7 @@ extension Layout {
                 el = next
             case let .choice(first, second):
                 if first.fits(containerWidth: containerWidth - x) {
-                    el = first
+                    return true
                 } else {
                     el = second
                 }
