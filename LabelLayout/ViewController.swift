@@ -8,73 +8,6 @@
 
 import UIKit
 
-indirect enum Layout {
-    case view(UIView, Layout)
-    case newline(Layout)
-    case choice(Layout, Layout)
-    case empty
-}
-
-extension Layout {
-    func apply(containerWidth: CGFloat) -> Set<UIView> {
-        var el = self
-        var p = CGPoint.zero
-        var lineHeight: CGFloat = 0
-        var result: Set<UIView> = []
-        while true {
-            switch el {
-            case let .view(view, next):
-                let size = view.sizeThatFits(CGSize(width: containerWidth - p.x, height: .greatestFiniteMagnitude))
-                view.frame = CGRect(origin: p, size: size).integral
-                p.x += size.width
-                lineHeight = max(lineHeight, size.height)
-                result.insert(view)
-                el = next
-            case let .newline(next):
-                p.x = 0
-                p.y += lineHeight
-                lineHeight = 0
-                el = next
-            case let .choice(first, second):
-                if first.fits(containerWidth: containerWidth - p.x) {
-                    el = first
-                } else {
-                    el = second
-                }
-            case .empty:
-                return result
-            }
-        }
-    }
-
-    func fits(containerWidth: CGFloat) -> Bool {
-        var el = self
-        var x: CGFloat = 0
-        while true {
-            switch el {
-            case let .view(view, next):
-                let size = view.sizeThatFits(CGSize(width: containerWidth - x, height: .greatestFiniteMagnitude))
-                x += size.width
-                if x >= containerWidth {
-                    return false
-                }
-                el = next
-            case let .newline(next):
-                x = 0
-                el = next
-            case let .choice(first, second):
-                if first.fits(containerWidth: containerWidth - x) {
-                    return true
-                } else {
-                    el = second
-                }
-            case .empty:
-                return true
-            }
-        }
-    }
-}
-
 extension UIView {
     func setSubviews<S: Sequence>(_ other: S) where S.Element == UIView {
         let views = Set(other)
@@ -88,24 +21,6 @@ extension UIView {
     }
 }
 
-final class LayoutView: UIView {
-    private let _layout: Layout
-    
-    init(_ layout: Layout) {
-        self._layout = layout
-        super.init(frame: .zero)
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: NSNotification.Name.UIContentSizeCategoryDidChange, object: nil)
-    }
-    
-    required init?(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    override func layoutSubviews() {
-        setSubviews(_layout.apply(containerWidth: bounds.width))
-    }
-}
 
 extension UILabel {
     convenience init(text: String, size: UIFontTextStyle, multiline: Bool = false) {
@@ -124,26 +39,21 @@ class ViewController: UIViewController {
         super.viewDidLoad()
         
         let titleLabel = UILabel(text: "Building a Layout Library", size: .headline, multiline: true)
-        let episodeNumber = UILabel(text: "Episode 123", size: .caption1)
-        let episodeDate = UILabel(text: "September 23", size: .caption1)
+        let episodeNumber = UILabel(text: "Episode 123", size: .body)
+        let episodeDate = UILabel(text: "September 23", size: .body)
 
-        let layout: Layout =
-            .view(titleLabel,
-            .newline(
-            .choice(
-                .view(episodeNumber, .view(episodeDate, .empty)),
-                .view(episodeNumber, .newline(.view(episodeDate, .empty)))
-            )))
-
-        let container = LayoutView(layout)
-        container.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(container)
+        let horizontalStack = UIStackView(arrangedSubviews: [episodeNumber, episodeDate])
+        let verticalStack = UIStackView(arrangedSubviews: [titleLabel, horizontalStack])
+        verticalStack.axis = .vertical
         
-        NSLayoutConstraint.activate([
-            view.layoutMarginsGuide.topAnchor.constraint(equalTo: container.topAnchor),
-            view.layoutMarginsGuide.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            view.layoutMarginsGuide.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+        view.addSubview(verticalStack)
+        verticalStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addConstraints([
+            verticalStack.topAnchor.constraint(equalTo: view.layoutMarginsGuide.topAnchor),
+            verticalStack.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
+            verticalStack.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
         ])
+       
     }
 }
 
