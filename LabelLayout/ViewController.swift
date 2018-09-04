@@ -34,9 +34,35 @@ extension UILabel {
     }
 }
 
+enum Width {
+    case absolute(CGFloat)
+    case flexible(min: CGFloat)
+    
+    var min: CGFloat {
+        switch self {
+        case let .absolute(x): return x
+        case let .flexible(min: x): return x
+        }
+    }
+    
+    var isFlexible: Bool {
+        switch self {
+        case .absolute: return false
+        case .flexible: return true
+        }
+    }
+    
+    func absolute(flexibleSpace: CGFloat) -> CGFloat {
+        switch self {
+        case let .absolute(w): return w
+        case let .flexible(min): return min + flexibleSpace
+        }
+    }
+}
+
 indirect enum Layout {
     case view(UIView, Layout)
-    case space(CGFloat, Layout)
+    case space(Width, Layout)
     case newline(space: CGFloat, Layout)
     case choice(Layout, Layout)
     case empty
@@ -44,17 +70,19 @@ indirect enum Layout {
 
 extension Layout {
     func apply(containerWidth: CGFloat) -> [UIView] {
-        let lines = computeLines(containerWidth: containerWidth, currentX: 0)
+        let lines = computeLines(containerWidth: containerWidth, onOverflow: { }, currentX: 0)
         var origin = CGPoint.zero
         var result: [UIView] = []
         for line in lines {
             origin.x = 0
             origin.y += line.space
+            let availableSpace = containerWidth - line.minWidth
+            let flexibleSpace = availableSpace / CGFloat(line.numberOfFlexibleSpaces)
             var lineHeight: CGFloat = 0
             for element in line.elements {
                 switch element {
                 case .space(let width):
-                    origin.x += width
+                    origin.x += width.absolute(flexibleSpace: flexibleSpace)
                 case let .view(v, size):
                     result.append(v)
                     v.frame = CGRect(origin: origin, size: size)
@@ -71,28 +99,41 @@ extension Layout {
 struct Line {
     enum Element {
         case view(UIView, CGSize)
-        case space(CGFloat)
+        case space(Width)
     }
     
     var elements: [Element]
     var space: CGFloat
     
-    var width: CGFloat {
-        return elements.reduce(0) { $0 + $1.width }
+    var minWidth: CGFloat {
+        return elements.reduce(0) { $0 + $1.minWidth }
+    }
+    
+    var numberOfFlexibleSpaces: Int {
+        return elements.filter { $0.isFlexible }.count
     }
 }
 
 extension Line.Element {
-    var width: CGFloat {
+    var isFlexible: Bool {
+        switch self {
+        case .view(_, _): return false
+        case let .space(width): return width.isFlexible
+        }
+    }
+    
+    var minWidth: CGFloat {
         switch self {
         case let .view(_, size): return size.width
-        case let .space(width): return width
+        case let .space(width): return width.min
         }
     }
 }
 
+struct OverflowError: Error {}
+
 extension Layout {
-    func computeLines(containerWidth: CGFloat, currentX: CGFloat) -> [Line] {
+    func computeLines(containerWidth: CGFloat, onOverflow: () throws -> () = { }, currentX: CGFloat) rethrows -> [Line] {
         var x = currentX
         var current: Layout = self
         var lines: [Line] = []
@@ -104,11 +145,11 @@ extension Layout {
                 let size = v.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
                 x += size.width
                 line.elements.append(.view(v, size))
-                //if x >= containerWidth { return false }
+                if x >= containerWidth { try onOverflow() }
                 current = rest
             case let .space(width, rest):
-                x += width
-                //if x >= containerWidth { return false }
+                x += width.min
+                if x >= containerWidth { try onOverflow() }
                 line.elements.append(.space(width))
                 current = rest
             case let .newline(space, rest):
@@ -117,14 +158,15 @@ extension Layout {
                 line = Line(elements: [], space: space)
                 current = rest
             case let .choice(first, second):
-                var firstLines = first.computeLines(containerWidth: containerWidth, currentX: x)
-                firstLines[0].elements.insert(contentsOf: line.elements, at: 0)
-                firstLines[0].space += line.space
-                let tooWide = firstLines.contains { $0.width >= containerWidth }
-                if tooWide {
-                    current = second
-                } else {
+                do {
+                    var firstLines = try first.computeLines(containerWidth: containerWidth, onOverflow: {
+                        throw OverflowError()
+                    }, currentX: x)
+                    firstLines[0].elements.insert(contentsOf: line.elements, at: 0)
+                    firstLines[0].space += line.space
                     return lines + firstLines
+                } catch {
+                    current = second
                 }
             case .empty:
                 lines.append(line)
@@ -156,11 +198,11 @@ final class LayoutContainer: UIView {
 }
 
 extension Array where Element == Layout {
-    func horizontal(space: CGFloat = 0) -> Layout {
+    func horizontal(space: Width? = nil) -> Layout {
         guard var result = last else { return .empty }
         for l in dropLast().reversed() {
-            if space > 0 {
-                result = .space(space, result)
+            if let width = space {
+                result = .space(width, result)
             }
             result = l + result
         }
@@ -209,8 +251,9 @@ class ViewController: UIViewController {
         let titleLabel = UILabel(text: "Building a Layout Library", size: .headline, multiline: true)
         let episodeNumber = UILabel(text: "Episode 123", size: .body)
         let episodeDate = UILabel(text: "September 23", size: .body)
+        let episodeViews = UILabel(text: "1000", size: .body)
         
-        let horizontal: Layout = [episodeNumber.layout, episodeDate.layout].horizontal(space: 20)
+        let horizontal: Layout = [episodeNumber.layout, episodeDate.layout, episodeViews.layout].horizontal(space: .flexible(min: 20))
         let vertical = [episodeNumber.layout, episodeDate.layout].vertical()
         let layout = [
             titleLabel.layout, horizontal.or(vertical)
