@@ -10,16 +10,17 @@ import UIKit
 
 
 
-func label(text: String, size: UIFontTextStyle, textColor: UIColor = .black, multiline: Bool = false) -> UILabel {
-    let label = UILabel()
-    label.font = UIFont.preferredFont(forTextStyle: size)
-    label.text = text
-    label.textColor = textColor
-    label.adjustsFontForContentSizeCategory = true
-    if multiline {
-        label.numberOfLines = 0
+extension UILabel {
+    convenience init(text: String, size: UIFontTextStyle, textColor: UIColor = .black, multiline: Bool = false) {
+        self.init()
+        font = UIFont.preferredFont(forTextStyle: size)
+        self.text = text
+        self.textColor = textColor
+        adjustsFontForContentSizeCategory = true
+        if multiline {
+            numberOfLines = 0
+        }
     }
-    return label
 }
 
 struct Airport {
@@ -56,9 +57,9 @@ extension Layout {
 }
 extension Airport {
     func layout(text: String) -> Layout {
-        let t = label(text: text, size: .caption2)
-        let code = label(text: self.code, size: .largeTitle)
-        let time = label(text: formatter.string(from: self.time), size: .caption1)
+        let t = UILabel(text: text, size: .caption2)
+        let code = UILabel(text: self.code, size: .largeTitle)
+        let time = UILabel(text: formatter.string(from: self.time), size: .caption1)
         return [t.layout().center, code.layout().center, time.layout().center].vertical()
     }
 }
@@ -69,7 +70,7 @@ extension Flight {
     }
 
     var metadataLayout: Layout {
-        let items: [Layout] = metaData.map { [label(text: $0, size: .caption2, textColor: .white).layout(), label(text: $1, size: .body, textColor: .white).layout()].vertical().inlineBox() }
+        let items: [Layout] = metaData.map { [UILabel(text: $0, size: .caption2, textColor: .white).layout(), UILabel(text: $1, size: .body, textColor: .white).layout()].vertical().inlineBox() }
         let wrapper = UIView()
         wrapper.backgroundColor = UIColor(red: 242/255, green: 27/255, blue: 63/255, alpha: 1)
         wrapper.layer.cornerRadius = 5
@@ -108,7 +109,7 @@ class ViewController: UIViewController {
         }
         let origin = sample.origin.layout(text: "FROM").inlineBox()
         let destination = sample.destination.layout(text: "TO").inlineBox()
-        let icon = label(text: "✈", size: .largeTitle, textColor: .gray).layout(verticalAlignment: .center)
+        let icon = UILabel(text: "✈", size: .largeTitle, textColor: .gray).layout(verticalAlignment: .center)
         let fromTo = [origin, icon, destination].horizontal(minSpacing: 20)
             .or([origin, Layout.verticalLine(color: .lightGray), destination].horizontal(minSpacing: 20)
             .or([origin.center, Layout.horizontalLine(color: .lightGray, height: 1), destination.center].vertical(space: 20)))
