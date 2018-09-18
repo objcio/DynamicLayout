@@ -307,8 +307,8 @@ extension BidirectionalCollection where Element == Layout {
     }
     
     func vertical(space: CGFloat = 0) -> Layout {
-        var result = Layout.empty
-        for e in reversed() {
+        guard var result = last else { return .empty }
+        for e in reversed().dropFirst() {
             result = e + .newline(space: space, result)
         }
         return result
