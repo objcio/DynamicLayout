@@ -23,7 +23,7 @@ extension UIView {
 
 
 extension UILabel {
-    convenience init(text: String, size: UIFontTextStyle, multiline: Bool = false) {
+    convenience init(text: String, size: UIFont.TextStyle, multiline: Bool = false) {
         self.init()
         font = UIFont.preferredFont(forTextStyle: size)
         self.text = text
@@ -70,7 +70,7 @@ indirect enum Layout {
 
 extension Layout {
     func apply(containerWidth: CGFloat) -> [UIView] {
-        let lines = computeLines(containerWidth: containerWidth, onOverflow: { }, currentX: 0)
+        let lines = computeLines(containerWidth: containerWidth, currentX: 0)
         var origin = CGPoint.zero
         var result: [UIView] = []
         for line in lines {
@@ -130,10 +130,8 @@ extension Line.Element {
     }
 }
 
-struct OverflowError: Error {}
-
 extension Layout {
-    func computeLines(containerWidth: CGFloat, onOverflow: () throws -> () = { }, currentX: CGFloat) rethrows -> [Line] {
+    func computeLines(containerWidth: CGFloat, currentX: CGFloat) -> [Line] {
         var x = currentX
         var current: Layout = self
         var lines: [Line] = []
@@ -145,11 +143,11 @@ extension Layout {
                 let size = v.sizeThatFits(CGSize(width: availableWidth, height: .greatestFiniteMagnitude))
                 x += size.width
                 line.elements.append(.view(v, size))
-                if x >= containerWidth { try onOverflow() }
+                //if x >= containerWidth { return false }
                 current = rest
             case let .space(width, rest):
                 x += width.min
-                if x >= containerWidth { try onOverflow() }
+                //if x >= containerWidth { return false }
                 line.elements.append(.space(width))
                 current = rest
             case let .newline(space, rest):
@@ -158,15 +156,14 @@ extension Layout {
                 line = Line(elements: [], space: space)
                 current = rest
             case let .choice(first, second):
-                do {
-                    var firstLines = try first.computeLines(containerWidth: containerWidth, onOverflow: {
-                        throw OverflowError()
-                    }, currentX: x)
-                    firstLines[0].elements.insert(contentsOf: line.elements, at: 0)
-                    firstLines[0].space += line.space
-                    return lines + firstLines
-                } catch {
+                var firstLines = first.computeLines(containerWidth: containerWidth, currentX: x)
+                firstLines[0].elements.insert(contentsOf: line.elements, at: 0)
+                firstLines[0].space += line.space
+                let tooWide = firstLines.contains { $0.minWidth >= containerWidth }
+                if tooWide {
                     current = second
+                } else {
+                    return lines + firstLines
                 }
             case .empty:
                 lines.append(line)
@@ -184,7 +181,7 @@ final class LayoutContainer: UIView {
         self._layout = layout
         super.init(frame: .zero)
         
-        NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: Notification.Name.UIContentSizeCategoryDidChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: UIContentSizeCategory.didChangeNotification, object: nil)
     }
     
     required init?(coder aDecoder: NSCoder) {
