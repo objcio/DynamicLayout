@@ -63,7 +63,7 @@ enum Width {
 indirect enum Layout {
     case view(UIView, Layout)
     case space(Width, Layout)
-    case box(contents: Layout, Layout)
+    case box(contents: Layout, wrapper: UIView?, Layout)
     case newline(space: CGFloat, Layout)
     case choice(Layout, Layout)
     case empty
@@ -88,13 +88,26 @@ extension Array where Element == Line {
             var lineHeight: CGFloat = 0
             for element in line.elements {
                 switch element {
-                case let .box(contents):
+                case let .box(contents, nil):
                     let width = element.minWidth
                     let views = contents.apply(containerWidth: width, startAt: origin)
                     origin.x += width
                     let height = (views.map { $0.frame.maxY }.max() ?? origin.y) - origin.y
                     lineHeight = Swift.max(lineHeight, height)
                     result.append(contentsOf: views)
+                case let .box(contents, wrapper?):
+                    let width = element.minWidth
+                    let margins = wrapper.layoutMargins.left + wrapper.layoutMargins.right
+                    let start = CGPoint(x: wrapper.layoutMargins.left, y: wrapper.layoutMargins.top)
+                    let subviews = contents.apply(containerWidth: width - margins, startAt: start)
+                    wrapper.setSubviews(subviews)
+                    let contentMaxY = subviews.map { $0.frame.maxY }.max() ?? 0
+                    let size = CGSize(width: width, height: contentMaxY + wrapper.layoutMargins.bottom)
+                    wrapper.frame = CGRect(origin: origin, size: size)
+
+                    origin.x += size.width
+                    lineHeight = Swift.max(lineHeight, size.height)
+                    result.append(wrapper)
                 case .space(let width):
                     origin.x += width.absolute(flexibleSpace: flexibleSpace)
                 case let .view(v, size):
@@ -114,7 +127,7 @@ struct Line {
     enum Element {
         case view(UIView, CGSize)
         case space(Width)
-        case box([Line])
+        case box([Line], wrapper: UIView?)
     }
     
     var elements: [Element]
@@ -141,7 +154,9 @@ extension Line.Element {
     var minWidth: CGFloat {
         switch self {
         case let .view(_, size): return size.width
-        case let .box(lines): return lines.map { $0.minWidth }.max() ?? 0
+        case let .box(lines, wrapper):
+            let margins = (wrapper?.layoutMargins).map { $0.left + $0.right } ?? 0
+            return (lines.map { $0.minWidth }.max() ?? 0) + margins
         case let .space(width): return width.min
         }
     }
@@ -167,10 +182,11 @@ extension Layout {
                 //if x >= containerWidth { return false }
                 line.elements.append(.space(width))
                 current = rest
-            case let .box(contents, rest):
-                let availableWidth = containerWidth - x
+            case let .box(contents, wrapper, rest):
+                let margins = (wrapper?.layoutMargins).map { $0.left + $0.right } ?? 0
+                let availableWidth = containerWidth - x - margins
                 let lines = contents.computeLines(containerWidth: availableWidth, currentX: x)
-                let result = Line.Element.box(lines)
+                let result = Line.Element.box(lines, wrapper: wrapper)
                 x += result.minWidth
                 line.elements.append(result)
                 current = rest
@@ -243,8 +259,8 @@ func +(lhs: Layout, rhs: Layout) -> Layout {
     switch lhs {
     case let .view(v, remainder):
         return .view(v, remainder+rhs)
-    case let .box(contents, remainder):
-        return .box(contents: contents, remainder + rhs)
+    case let .box(contents, wrapper, remainder):
+        return .box(contents: contents, wrapper: wrapper, remainder + rhs)
     case let .space(w, r):
         return .space(w, r + rhs)
     case let .newline(space, r):
@@ -267,8 +283,8 @@ extension Layout {
         return .choice(self, other)
     }
     
-    func box() -> Layout {
-        return .box(contents: self, .empty)
+    func box(wrapper: UIView? = nil) -> Layout {
+        return .box(contents: self, wrapper: wrapper, .empty)
     }
 }
 
@@ -280,17 +296,29 @@ class ViewController: UIViewController {
         
         let episodeNumberTitle = UILabel(text: "Episode", size: .headline).layout
         let episodeNumber = UILabel(text: "123", size: .body).layout
+        let numberWrapper = UIView()
+        numberWrapper.backgroundColor = .red
+        numberWrapper.layoutMargins = UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        numberWrapper.layer.cornerRadius = 10
         
         let episodeDateTitle = UILabel(text: "Date", size: .headline).layout
         let episodeDate = UILabel(text: "September 23", size: .body).layout
+        let dateWrapper = UIView()
+        dateWrapper.backgroundColor = .green
+        dateWrapper.layoutMargins = .zero
         
-        let number = [episodeNumberTitle, episodeNumber].vertical().box()
-        let date = [episodeDateTitle, episodeDate].vertical().box()
+        let number = [episodeNumberTitle, episodeNumber].vertical().box(wrapper: numberWrapper)
+        let date = [episodeDateTitle, episodeDate].vertical().box(wrapper: dateWrapper)
+        
+        let blueBox = UIView()
+        blueBox.backgroundColor = .blue
+        blueBox.layoutMargins = UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        blueBox.layer.cornerRadius = 10
         
         let horizontal: Layout = [number, date].horizontal(space: .flexible(min: 20))
         let vertical = [number, date].vertical(space: 10)
         let layout = [
-            titleLabel, horizontal.or(vertical)
+            titleLabel, horizontal.or(vertical).box(wrapper: blueBox)
         ].vertical(space: 20)
         
         let container = LayoutContainer(layout)
