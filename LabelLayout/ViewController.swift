@@ -63,6 +63,7 @@ enum Width {
 indirect enum Layout {
     case view(UIView, Layout)
     case space(Width, Layout)
+    case box(contents: Layout, Layout)
     case newline(space: CGFloat, Layout)
     case choice(Layout, Layout)
     case empty
@@ -71,23 +72,36 @@ indirect enum Layout {
 extension Layout {
     func apply(containerWidth: CGFloat) -> [UIView] {
         let lines = computeLines(containerWidth: containerWidth, currentX: 0)
-        var origin = CGPoint.zero
+        return lines.apply(containerWidth: containerWidth, startAt: .zero)
+    }
+}
+
+extension Array where Element == Line {
+    func apply(containerWidth: CGFloat, startAt: CGPoint) -> [UIView] {
+        var origin = startAt
         var result: [UIView] = []
-        for line in lines {
-            origin.x = 0
+        for line in self {
+            origin.x = startAt.x
             origin.y += line.space
             let availableSpace = containerWidth - line.minWidth
             let flexibleSpace = availableSpace / CGFloat(line.numberOfFlexibleSpaces)
             var lineHeight: CGFloat = 0
             for element in line.elements {
                 switch element {
+                case let .box(contents):
+                    let width = element.minWidth
+                    let views = contents.apply(containerWidth: width, startAt: origin)
+                    origin.x += width
+                    let height = (views.map { $0.frame.maxY }.max() ?? origin.y) - origin.y
+                    lineHeight = Swift.max(lineHeight, height)
+                    result.append(contentsOf: views)
                 case .space(let width):
                     origin.x += width.absolute(flexibleSpace: flexibleSpace)
                 case let .view(v, size):
                     result.append(v)
                     v.frame = CGRect(origin: origin, size: size)
                     origin.x += size.width
-                    lineHeight = max(lineHeight, size.height)
+                    lineHeight = Swift.max(lineHeight, size.height)
                 }
             }
             origin.y += lineHeight
@@ -100,6 +114,7 @@ struct Line {
     enum Element {
         case view(UIView, CGSize)
         case space(Width)
+        case box([Line])
     }
     
     var elements: [Element]
@@ -117,7 +132,8 @@ struct Line {
 extension Line.Element {
     var isFlexible: Bool {
         switch self {
-        case .view(_, _): return false
+        case .view: return false
+        case .box: return false
         case let .space(width): return width.isFlexible
         }
     }
@@ -125,6 +141,7 @@ extension Line.Element {
     var minWidth: CGFloat {
         switch self {
         case let .view(_, size): return size.width
+        case let .box(lines): return lines.map { $0.minWidth }.max() ?? 0
         case let .space(width): return width.min
         }
     }
@@ -149,6 +166,13 @@ extension Layout {
                 x += width.min
                 //if x >= containerWidth { return false }
                 line.elements.append(.space(width))
+                current = rest
+            case let .box(contents, rest):
+                let availableWidth = containerWidth - x
+                let lines = contents.computeLines(containerWidth: availableWidth, currentX: x)
+                let result = Line.Element.box(lines)
+                x += result.minWidth
+                line.elements.append(result)
                 current = rest
             case let .newline(space, rest):
                 x = 0
@@ -217,7 +241,10 @@ extension Array where Element == Layout {
 
 func +(lhs: Layout, rhs: Layout) -> Layout {
     switch lhs {
-    case let .view(v, remainder): return .view(v, remainder+rhs)
+    case let .view(v, remainder):
+        return .view(v, remainder+rhs)
+    case let .box(contents, remainder):
+        return .box(contents: contents, remainder + rhs)
     case let .space(w, r):
         return .space(w, r + rhs)
     case let .newline(space, r):
@@ -239,21 +266,31 @@ extension Layout {
     func or(_ other: Layout) -> Layout {
         return .choice(self, other)
     }
+    
+    func box() -> Layout {
+        return .box(contents: self, .empty)
+    }
 }
 
 class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let titleLabel = UILabel(text: "Building a Layout Library", size: .headline, multiline: true)
-        let episodeNumber = UILabel(text: "Episode 123", size: .body)
-        let episodeDate = UILabel(text: "September 23", size: .body)
-        let episodeViews = UILabel(text: "1000", size: .body)
+        let titleLabel = UILabel(text: "Building a Layout Library", size: .headline, multiline: true).layout
         
-        let horizontal: Layout = [episodeNumber.layout, episodeDate.layout, episodeViews.layout].horizontal(space: .flexible(min: 20))
-        let vertical = [episodeNumber.layout, episodeDate.layout].vertical()
+        let episodeNumberTitle = UILabel(text: "Episode", size: .headline).layout
+        let episodeNumber = UILabel(text: "123", size: .body).layout
+        
+        let episodeDateTitle = UILabel(text: "Date", size: .headline).layout
+        let episodeDate = UILabel(text: "September 23", size: .body).layout
+        
+        let number = [episodeNumberTitle, episodeNumber].vertical().box()
+        let date = [episodeDateTitle, episodeDate].vertical().box()
+        
+        let horizontal: Layout = [number, date].horizontal(space: .flexible(min: 20))
+        let vertical = [number, date].vertical(space: 10)
         let layout = [
-            titleLabel.layout, horizontal.or(vertical)
+            titleLabel, horizontal.or(vertical)
         ].vertical(space: 20)
         
         let container = LayoutContainer(layout)
