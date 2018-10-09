@@ -289,8 +289,7 @@ final class LayoutView: UIView {
 
 extension BidirectionalCollection where Element == Layout {
     func horizontal(space: Width? = nil) -> Layout {
-        guard let v = last else { return .empty }
-        var result = v
+        guard var result = last else { return .empty }
         for e in reversed().dropFirst() {
             if let w = space {
                 result = .element(.space, w, vertical: .top, result)
@@ -301,8 +300,8 @@ extension BidirectionalCollection where Element == Layout {
     }
 
     func vertical(space: CGFloat = 0) -> Layout {
-        var result = Layout.empty
-        for e in reversed() {
+        guard var result = last else { return .empty }
+        for e in reversed().dropFirst() {
             result = e + .newline(space: space, result)
         }
         return result
