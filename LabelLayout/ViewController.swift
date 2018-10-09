@@ -275,7 +275,7 @@ final class LayoutView: UIView {
         self._layout = layout
         super.init(frame: .zero)
         
-        NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: NSNotification.Name.UIContentSizeCategoryDidChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: UIContentSizeCategory.didChangeNotification, object: nil)
     }
     
     required init?(coder aDecoder: NSCoder) {
@@ -334,7 +334,7 @@ extension Layout {
     }
 }
 
-func label(text: String, size: UIFontTextStyle, textColor: UIColor = .black, multiline: Bool = false) -> UILabel {
+func label(text: String, size: UIFont.TextStyle, textColor: UIColor = .black, multiline: Bool = false) -> UILabel {
     let label = UILabel()
     label.font = UIFont.preferredFont(forTextStyle: size)
     label.text = text
