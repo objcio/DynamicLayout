@@ -17,7 +17,7 @@ enum Width {
 enum Element {
     case view(UIView)
     case space
-    case inlineBox(wrapper: UIView?, Layout)
+    case box(wrapper: UIView?, Layout)
     
     func width(_ width: Width, availableWidth: CGFloat) -> Line.BlockWidth {
         switch width {
@@ -27,7 +27,7 @@ enum Element {
             return .flexible(min: x)
         case .basedOnContents:
             switch self {
-            case let .inlineBox(wrapper, layout):
+            case let .box(wrapper, layout):
                 let contentWidth = layout.computeLines(containerWidth: availableWidth, startingAt: 0)?.map { $0.minWidth }.max() ?? 0
                 return .absolute(contentWidth + (wrapper?.layoutMargins.width ?? 0))
             case let .view(view):
@@ -61,7 +61,7 @@ indirect enum Layout {
 
 struct Line {
     enum Block {
-        case inlineBox(wrapper: UIView?, [Line])
+        case box(wrapper: UIView?, [Line])
         case view(UIView)
         case space
     }
@@ -118,11 +118,11 @@ extension Line.Block {
             let frame = CGRect(origin: origin, size: CGSize(width: absWidth, height: height))
             view.frame = frame.integral
             result.insert(view)
-        case let .inlineBox(nil, lines):
+        case let .box(nil, lines):
             let nested = lines.apply(containerWidth: absWidth, origin: origin)
             result.formUnion(nested)
             height = nested.maxY - origin.y
-        case let .inlineBox(wrapper?, lines):
+        case let .box(wrapper?, lines):
             let width = absWidth - wrapper.layoutMargins.width
             let nestedOrigin = CGPoint(x: wrapper.layoutMargins.left, y: wrapper.layoutMargins.top)
             let subviews = lines.apply(containerWidth: width, origin: nestedOrigin)
@@ -209,10 +209,10 @@ extension Layout {
                     line.elements.append((.view(view), blockWidth, alignment))
                 case .space:
                     line.elements.append((.space, blockWidth, alignment))
-                case let .inlineBox(wrapper, layout):
+                case let .box(wrapper, layout):
                     // todo: we compute this twice!
                     let box = layout.computeLines(containerWidth: containerWidth - currentWidth, startingAt: 0)!
-                    line.elements.append((.inlineBox(wrapper: wrapper, box), blockWidth, alignment))
+                    line.elements.append((.box(wrapper: wrapper, box), blockWidth, alignment))
                 }
                 if cancelOnOverflow && currentWidth > containerWidth {
                     return nil
@@ -269,10 +269,10 @@ extension Layout {
 }
 
 final class LayoutView: UIView {
-    private let _layout: Layout
+    var layout: Layout { didSet { setNeedsLayout() } }
     
     init(_ layout: Layout) {
-        self._layout = layout
+        self.layout = layout
         super.init(frame: .zero)
         
         NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: UIContentSizeCategory.didChangeNotification, object: nil)
@@ -283,17 +283,17 @@ final class LayoutView: UIView {
     }
     
     override func layoutSubviews() {
-        setSubviews(_layout.apply(containerWidth: bounds.width))
+        setSubviews(layout.apply(containerWidth: bounds.width))
     }
 }
 
 extension BidirectionalCollection where Element == Layout {
-    func horizontal(minSpacing: CGFloat? = nil) -> Layout {
+    func horizontal(space: Width? = nil) -> Layout {
         guard let v = last else { return .empty }
         var result = v
         for e in reversed().dropFirst() {
-            if let s = minSpacing {
-                result = .element(.space, .flexible(min: s), vertical: .top, result)
+            if let w = space {
+                result = .element(.space, w, vertical: .top, result)
             }
             result = e + result
         }
@@ -329,21 +329,20 @@ extension Layout {
         return .choice(self, other)
     }
     
-    func inlineBox(width: Width = .basedOnContents, vertical: VerticalAlignment = .top, wrapper: UIView? = nil) -> Layout {
-        return .element(.inlineBox(wrapper: wrapper, self), width, vertical: vertical, .empty)
+    func box(width: Width = .basedOnContents, vertical: VerticalAlignment = .top, wrapper: UIView? = nil) -> Layout {
+        return .element(.box(wrapper: wrapper, self), width, vertical: vertical, .empty)
     }
 }
 
-func label(text: String, size: UIFont.TextStyle, textColor: UIColor = .black, multiline: Bool = false) -> UILabel {
-    let label = UILabel()
-    label.font = UIFont.preferredFont(forTextStyle: size)
-    label.text = text
-    label.textColor = textColor
-    label.adjustsFontForContentSizeCategory = true
-    if multiline {
-        label.numberOfLines = 0
+extension UILabel {
+    convenience init(text: String, size: UIFont.TextStyle, textColor: UIColor = .black, numberOfLines: Int = 1) {
+        self.init()
+        font = UIFont.preferredFont(forTextStyle: size)
+        self.text = text
+        self.textColor = textColor
+        adjustsFontForContentSizeCategory = true
+        self.numberOfLines = numberOfLines
     }
-    return label
 }
 
 struct Airport {
@@ -375,14 +374,14 @@ let formatter: DateFormatter = {
 
 extension Layout {
     var center: Layout {
-        return [Layout.space(), self, Layout.space()].horizontal(minSpacing: nil)
+        return [.space(), self, .space()].horizontal()
     }
 }
 extension Airport {
     func layout(text: String) -> Layout {
-        let t = label(text: text, size: .caption2)
-        let code = label(text: self.code, size: .largeTitle)
-        let time = label(text: formatter.string(from: self.time), size: .caption1)
+        let t = UILabel(text: text, size: .caption2)
+        let code = UILabel(text: self.code, size: .largeTitle)
+        let time = UILabel(text: formatter.string(from: self.time), size: .caption1)
         return [t.layout().center, code.layout().center, time.layout().center].vertical()
     }
 }
@@ -393,13 +392,13 @@ extension Flight {
     }
 
     var metadataLayout: Layout {
-        let items: [Layout] = metaData.map { [label(text: $0, size: .caption2, textColor: .white).layout(), label(text: $1, size: .body, textColor: .white).layout()].vertical().inlineBox() }
+        let items: [Layout] = metaData.map { [UILabel(text: $0, size: .caption2, textColor: .white).layout(), UILabel(text: $1, size: .body, textColor: .white).layout()].vertical().box() }
         let wrapper = UIView()
         wrapper.backgroundColor = UIColor(red: 242/255, green: 27/255, blue: 63/255, alpha: 1)
         wrapper.layer.cornerRadius = 5
         assert(items.count == 4)
-        let els = items.horizontal(minSpacing: 20).or([items[0...1].horizontal(minSpacing: 20), items[2...3].horizontal(minSpacing: 20)].vertical(space: 20)).or(items.vertical(space: 20))
-        return els.inlineBox(width: .flexible(min: 0), wrapper: wrapper)
+        let els = items.horizontal(space: .flexible(min: 20)).or([items[0...1].horizontal(space: .flexible(min: 20)), items[2...3].horizontal(space: .flexible(min: 20))].vertical(space: 20)).or(items.vertical(space: 20))
+        return els.box(width: .flexible(min: 0), wrapper: wrapper)
     }
 }
 
@@ -429,13 +428,13 @@ class ViewController: UIViewController {
             roundedBox.backgroundColor = .white
             return roundedBox
         }
-        let origin = sample.origin.layout(text: "FROM").inlineBox()
-        let destination = sample.destination.layout(text: "TO").inlineBox()
-        let icon = label(text: "✈", size: .largeTitle, textColor: .gray).layout(verticalAlignment: .center)
-        let fromTo = [origin, icon, destination].horizontal(minSpacing: 20)
-            .or([origin, Layout.verticalLine(color: .lightGray), destination].horizontal(minSpacing: 20)
+        let origin = sample.origin.layout(text: "FROM").box()
+        let destination = sample.destination.layout(text: "TO").box()
+        let icon = UILabel(text: "✈", size: .largeTitle, textColor: .gray).layout(verticalAlignment: .center)
+        let fromTo = [origin, icon, destination].horizontal(space: .flexible(min: 20))
+            .or([origin, Layout.verticalLine(color: .lightGray), destination].horizontal(space: .flexible(min: 20))
             .or([origin.center, Layout.horizontalLine(color: .lightGray, height: 1), destination.center].vertical(space: 20)))
-        let l = fromTo.inlineBox(width: .flexible(min: 0), wrapper: box())
+        let l = fromTo.box(width: .flexible(min: 0), wrapper: box())
         let layout = [l, sample.metadataLayout].vertical(space: 20)
         
         let container = LayoutView(layout)
