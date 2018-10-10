@@ -8,10 +8,20 @@
 
 import UIKit
 
-enum Width {
+indirect enum Width {
     case basedOnContents
-    case flexible(min: CGFloat)
+    case flexible(min: Width)
     case absolute(CGFloat)
+}
+
+extension Width: ExpressibleByIntegerLiteral, ExpressibleByFloatLiteral {
+    init(integerLiteral value: Int) {
+        self = .absolute(CGFloat(value))
+    }
+    
+    init(floatLiteral value: Double) {
+        self = .absolute(CGFloat(value))
+    }
 }
 
 enum Element {
@@ -23,8 +33,11 @@ enum Element {
         switch width {
         case let .absolute(x):
             return .absolute(x)
-        case let .flexible(min: x):
-            return .flexible(min: x)
+        case let .flexible(min: nested):
+            switch self.width(nested, availableWidth: availableWidth) {
+            case .absolute(let x): return .flexible(min: x)
+            case .flexible: fatalError("Can't nest flexible widths")
+            }
         case .basedOnContents:
             switch self {
             case let .box(wrapper, layout):
@@ -396,7 +409,7 @@ extension Flight {
         wrapper.backgroundColor = UIColor(red: 242/255, green: 27/255, blue: 63/255, alpha: 1)
         wrapper.layer.cornerRadius = 5
         assert(items.count == 4)
-        let els = items.horizontal(space: .flexible(min: 20)).or([items[0...1].horizontal(space: .flexible(min: 20)), items[2...3].horizontal(space: .flexible(min: 20))].vertical(space: 20)).or(items.vertical(space: 20))
+        let els = items.horizontal(space: .flexible(min: .absolute(20))).or([items[0...1].horizontal(space: .flexible(min: 20)), items[2...3].horizontal(space: .flexible(min: 20))].vertical(space: 20)).or(items.vertical(space: 20))
         return els.box(width: .flexible(min: 0), wrapper: wrapper)
     }
 }
@@ -412,7 +425,7 @@ extension Layout {
         let view = UIView()
         view.backgroundColor = color
         view.frame.size.height = height
-        return view.layout(width: .flexible(min: minWidth), verticalAlignment: .stretch)
+        return view.layout(width: .flexible(min: .absolute(minWidth)), verticalAlignment: .stretch)
     }
 }
 class ViewController: UIViewController {
@@ -427,14 +440,16 @@ class ViewController: UIViewController {
             roundedBox.backgroundColor = .white
             return roundedBox
         }
-        let origin = sample.origin.layout(text: "FROM").box()
-        let destination = sample.destination.layout(text: "TO").box()
-        let icon = UILabel(text: "✈", size: .largeTitle, textColor: .gray).layout(verticalAlignment: .center)
-        let fromTo = [origin, icon, destination].horizontal(space: .flexible(min: 20))
-            .or([origin, Layout.verticalLine(color: .lightGray), destination].horizontal(space: .flexible(min: 20))
-            .or([origin.center, Layout.horizontalLine(color: .lightGray, height: 1), destination.center].vertical(space: 20)))
-        let l = fromTo.box(width: .flexible(min: 0), wrapper: box())
-        let layout = [l, sample.metadataLayout].vertical(space: 20)
+//        let origin = sample.origin.layout(text: "FROM").box()
+//        let destination = sample.destination.layout(text: "TO").box()
+//        let icon = UILabel(text: "✈", size: .largeTitle, textColor: .gray).layout(verticalAlignment: .center)
+//        let fromTo = [origin, icon, destination].horizontal(space: .flexible(min: .absolute(20)))
+//            .or([origin, Layout.verticalLine(color: .lightGray), destination].horizontal(space: .flexible(min: 20))
+//            .or([origin.center, Layout.horizontalLine(color: .lightGray, height: 1), destination.center].vertical(space: 20)))
+//        let l = fromTo.box(width: .flexible(min: 0), wrapper: box())
+//        let layout = [l, sample.metadataLayout].vertical(space: 20)
+        let labels = ["one", "two", "three", "four", "five"].map { UILabel(text: $0, size: .body).layout() }
+        let layout = labels.horizontal(space: .flexible(min: 10)).box(width: .flexible(min: .basedOnContents), vertical: .top, wrapper: box()).or(labels[0])
         
         let container = LayoutView(layout)
         container.translatesAutoresizingMaskIntoConstraints = false
