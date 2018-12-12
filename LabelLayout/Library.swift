@@ -17,7 +17,7 @@ enum Width {
 enum Element {
     case view(UIView)
     case space
-    case inlineBox(wrapper: UIView?, Layout)
+    case box(wrapper: UIView?, Layout)
     
     func width(_ width: Width, availableWidth: CGFloat) -> Line.BlockWidth {
         switch width {
@@ -27,7 +27,7 @@ enum Element {
             return .flexible(min: x)
         case .basedOnContents:
             switch self {
-            case let .inlineBox(wrapper, layout):
+            case let .box(wrapper, layout):
                 let contentWidth = layout.computeLines(containerWidth: availableWidth, startingAt: 0)?.map { $0.minWidth }.max() ?? 0
                 return .absolute(contentWidth + (wrapper?.layoutMargins.width ?? 0))
             case let .view(view):
@@ -209,7 +209,7 @@ extension Layout {
                     line.elements.append((.view(view), blockWidth, alignment))
                 case .space:
                     line.elements.append((.space, blockWidth, alignment))
-                case let .inlineBox(wrapper, layout):
+                case let .box(wrapper, layout):
                     // todo: we compute this twice!
                     let box = layout.computeLines(containerWidth: containerWidth - currentWidth, startingAt: 0)!
                     line.elements.append((.inlineBox(wrapper: wrapper, box), blockWidth, alignment))
@@ -276,7 +276,7 @@ final class LayoutView: UIView {
         self._layout = layout
         super.init(frame: .zero)
         
-        NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: NSNotification.Name.UIContentSizeCategoryDidChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(setNeedsLayout), name: UIContentSizeCategory.didChangeNotification, object: nil)
     }
     
     required init?(coder aDecoder: NSCoder) {
@@ -294,12 +294,12 @@ final class LayoutView: UIView {
 }
 
 extension BidirectionalCollection where Element == Layout {
-    func horizontal(minSpacing: CGFloat? = nil) -> Layout {
+    func horizontal(space: Width? = nil) -> Layout {
         guard let v = last else { return .empty }
         var result = v
         for e in reversed().dropFirst() {
-            if let s = minSpacing {
-                result = .element(.space, .flexible(min: s), vertical: .top, result)
+            if let s = space {
+                result = .element(.space, s, vertical: .top, result)
             }
             result = e + result
         }
@@ -335,56 +335,8 @@ extension Layout {
         return .choice(self, other)
     }
     
-    func inlineBox(width: Width = .basedOnContents, vertical: VerticalAlignment = .top, wrapper: UIView? = nil) -> Layout {
-        return .element(.inlineBox(wrapper: wrapper, self), width, vertical: vertical, .empty)
+    func box(width: Width = .basedOnContents, vertical: VerticalAlignment = .top, wrapper: UIView? = nil) -> Layout {
+        return .element(.box(wrapper: wrapper, self), width, vertical: vertical, .empty)
     }
 }
 
-
-
-class ResizableView: UIView {
-    let dragger = UIView()
-    var trailingConstraint: NSLayoutConstraint!
-    var nested: UIView
-    
-    init(frame: CGRect, nested: UIView) {
-        self.nested = nested
-        super.init(frame: frame)
-        addSubview(nested)
-        addSubview(dragger)
-        dragger.backgroundColor = .red
-        dragger.translatesAutoresizingMaskIntoConstraints = false
-        trailingConstraint = nested.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor)
-        addConstraints([
-            nested.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
-            trailingConstraint,
-            nested.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
-            nested.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor)
-            ])
-        addConstraints([
-            dragger.widthAnchor.constraint(equalToConstant: 20),
-            dragger.heightAnchor.constraint(equalToConstant: 20),
-            dragger.trailingAnchor.constraint(equalTo: nested.trailingAnchor),
-            dragger.bottomAnchor.constraint(equalTo: bottomAnchor)
-            ])
-        dragger.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(didPan(_:))))
-        bringSubview(toFront: dragger)
-    }
-    
-    required init?(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    @objc func didPan(_ gestureRecognizer: UIPanGestureRecognizer) {
-        let offset = gestureRecognizer.location(in: self)
-        trailingConstraint.constant = min(0, -(frame.width - offset.x))
-        UIView.animate(withDuration: 0.2) {
-            self.layoutIfNeeded()
-        }
-    }
-    
-    override func layoutSubviews() {
-        super.layoutSubviews()
-    }
-    
-}

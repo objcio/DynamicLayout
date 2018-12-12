@@ -8,10 +8,8 @@
 
 import UIKit
 
-
-
 extension UILabel {
-    convenience init(text: String, size: UIFontTextStyle, textColor: UIColor = .black, multiline: Bool = false) {
+    convenience init(text: String, size: UIFont.TextStyle, textColor: UIColor = .black, multiline: Bool = false) {
         self.init()
         font = UIFont.preferredFont(forTextStyle: size)
         self.text = text
@@ -23,101 +21,96 @@ extension UILabel {
     }
 }
 
-struct Airport {
-    var city: String
-    var code: String
-    var time: Date
-}
 
-struct Flight {
-    var origin: Airport
-    var destination: Airport
-    var name: String
-    var terminal: String
-    var gate: String
-    var boarding: Date
+struct Episode: Codable {
+    var media_duration: TimeInterval
+    var synopsis: String
+    var title: String
+    var number: Int
+    var collection: String
+    var released_at: Date
+    var url: URL
+    var small_poster_url: URL
+    var subscription_only: Bool
 }
-
-let start: TimeInterval = 3600*7
-let sample = Flight(origin: Airport(city: "Berlin", code: "TXL", time:
-    Date(timeIntervalSince1970: start)), destination: Airport(city: "Paris", code: "CDG", time: Date(timeIntervalSince1970: start + 2*3600)), name: "AF123", terminal: "1", gate: "14", boarding: Date(timeIntervalSince1970: start - 1800))
 
 let formatter: DateFormatter = {
-	let f = DateFormatter()
-    f.dateStyle = .none
-    f.timeStyle = .short
-//    f.locale = Locale(identifier: "de_DE")
-	return f
+    let f = DateFormatter()
+    f.dateStyle = .long
+    f.timeStyle = .none
+    return f
 }()
 
-extension Layout {
-    var center: Layout {
-        return [Layout.space(), self, Layout.space()].horizontal(minSpacing: nil)
+<<<<<<< Updated upstream
+let shortFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateStyle = .short
+    f.timeStyle = .none
+    return f
+}()
+
+extension Episode {
+    var layout: Layout {
+        let title = UILabel(text: self.title, size: .headline, multiline: true).layout()
+        let synopsis = UILabel(text: self.synopsis, size: .body, multiline: true)
+        let dateLong = UILabel(text: formatter.string(from: self.released_at), size: .caption1).layout()
+        let dateShort = UILabel(text: shortFormatter.string(from: self.released_at), size: .caption1).layout()
+        //        let date = dateLong.or(dateShort)
+        let epNumSmall = UILabel(text: "# \(number)", size: .caption1).layout()
+        let epNumFull = UILabel(text: "Episode \(number)", size: .caption1).layout()
+        //        let epNum = epNumFull.or(epNumSmall)
+        
+        let duration = UILabel(text: media_duration.hoursAndMinutes, size: .caption1).layout()
+        let meta = [epNumFull, duration, dateLong].horizontal(space: .flexible(min: 10)).or(
+            [epNumSmall, duration, dateShort].horizontal(space: .flexible(min: 10))
+            ).or(
+                [epNumSmall, dateShort].horizontal(space: .flexible(min: 20))
+        )
+        let white = UIView()
+        white.backgroundColor = .white
+        let i = UIImageView(image: UIImage(named: "thumbs/" + small_poster_url.lastPathComponent))
+        i.contentMode = .scaleAspectFit
+        let synOrImg = [i.layout(width: .flexible(min: 300), verticalAlignment: .top), synopsis.layout(width: .flexible(min: 300), verticalAlignment: .top)].horizontal(space: .absolute(20))
+        return [title, meta, synOrImg].vertical(space: 10).box(width: .flexible(min: 0), vertical: .top, wrapper: white)
     }
 }
+
+let episodes: [Episode] = {
+    let d = JSONDecoder()
+    let url = Bundle.main.url(forResource: "episodes", withExtension: "json")!
+    let data = try! Data(contentsOf: url)
+    return try! d.decode([Episode].self, from: data)
+}()
+=======
 extension Airport {
-    func layout(text: String) -> Layout {
-        let t = UILabel(text: text, size: .caption2)
-        let code = UILabel(text: self.code, size: .largeTitle)
-        let time = UILabel(text: formatter.string(from: self.time), size: .caption1)
-        return [t.layout().center, code.layout().center, time.layout().center].vertical()
+    func layout(title: String) -> Layout {
+        let from = UILabel(text: title, size: .caption1).layout()
+        let code = UILabel(text: self.code, size: .title1).layout()
+        let time = UILabel(text: formatter.string(from: self.time), size: .caption1).layout()
+        
+        return [from, code, time].vertical()
     }
 }
-
-extension Flight {
-    var metaData: [(String, String)] {
-        return [("FLIGHT", name), ("TERMINAL", terminal), ("GATE", gate), ("BOARDING", formatter.string(from: boarding))]
-    }
-
-    var metadataLayout: Layout {
-        let items: [Layout] = metaData.map { [UILabel(text: $0, size: .caption2, textColor: .white).layout(), UILabel(text: $1, size: .body, textColor: .white).layout()].vertical().inlineBox() }
-        let wrapper = UIView()
-        wrapper.backgroundColor = UIColor(red: 242/255, green: 27/255, blue: 63/255, alpha: 1)
-        wrapper.layer.cornerRadius = 5
-        assert(items.count == 4)
-        let els = items.horizontal(minSpacing: 20).or([items[0...1].horizontal(minSpacing: 20), items[2...3].horizontal(minSpacing: 20)].vertical(space: 20)).or(items.vertical(space: 20))
-        return els.inlineBox(width: .flexible(min: 0), wrapper: wrapper)
-    }
-}
-
-extension Layout {
-    static func verticalLine(color: UIColor, width: Width = .absolute(0.5)) -> Layout {
-        let view = UIView()
-        view.backgroundColor = color
-        return view.layout(width: width, verticalAlignment: .stretch)
-    }
-
-    static func horizontalLine(color: UIColor, minWidth: CGFloat = 0, height: CGFloat) -> Layout {
-        let view = UIView()
-        view.backgroundColor = color
-        view.frame.size.height = height
-        return view.layout(width: .flexible(min: minWidth), verticalAlignment: .stretch)
-    }
-}
+>>>>>>> Stashed changes
 
 class ViewController: UIViewController {
     var token: Any?
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        func box() -> UIView {
-            let roundedBox = UIView()
-            roundedBox.layer.cornerRadius = 5
-            roundedBox.backgroundColor = .white
-            return roundedBox
-        }
-        let origin = sample.origin.layout(text: "FROM").inlineBox()
-        let destination = sample.destination.layout(text: "TO").inlineBox()
-        let icon = UILabel(text: "✈", size: .largeTitle, textColor: .gray).layout(verticalAlignment: .center)
-        let fromTo = [origin, icon, destination].horizontal(minSpacing: 20)
-            .or([origin, Layout.verticalLine(color: .lightGray), destination].horizontal(minSpacing: 20)
-            .or([origin.center, Layout.horizontalLine(color: .lightGray, height: 1), destination.center].vertical(space: 20)))
-        let l = fromTo.inlineBox(width: .flexible(min: 0), wrapper: box())
-        let layout = [l, sample.metadataLayout].vertical(space: 20)
+<<<<<<< Updated upstream
 
+      
+        let container = LayoutView(episodes.randomElement()!.layout)
+=======
+        
+        let layout = [
+            sample.origin.layout(title: "FROM"),
+            sample.destination.layout(title: "TO")
+        ].horizontal()
         
         let container = LayoutView(layout)
+>>>>>>> Stashed changes
         let resizable = ResizableView(frame: .zero, nested: container)
         container.translatesAutoresizingMaskIntoConstraints = false
         view.backgroundColor = UIColor(white: 0.9, alpha: 1)

@@ -12,7 +12,11 @@
 		83187C30212EB0E3000F0EF1 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 83187C2E212EB0E3000F0EF1 /* Main.storyboard */; };
 		83187C32212EB0E4000F0EF1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 83187C31212EB0E4000F0EF1 /* Assets.xcassets */; };
 		83187C35212EB0E4000F0EF1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 83187C33212EB0E4000F0EF1 /* LaunchScreen.storyboard */; };
+		832C14DF2152A3E700290C39 /* ResizableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 832C14DE2152A3E700290C39 /* ResizableView.swift */; };
 		837E8ECB21450E6C007700BB /* Library.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837E8ECA21450E6C007700BB /* Library.swift */; };
+		83A0558321C1576100CD2AF7 /* Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83A0558221C1576100CD2AF7 /* Helpers.swift */; };
+		83A0558521C157E100CD2AF7 /* episodes.json in Resources */ = {isa = PBXBuildFile; fileRef = 83A0558421C157E100CD2AF7 /* episodes.json */; };
+		83A0558721C157E800CD2AF7 /* thumbs in Resources */ = {isa = PBXBuildFile; fileRef = 83A0558621C157E800CD2AF7 /* thumbs */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,7 +27,11 @@
 		83187C31212EB0E4000F0EF1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		83187C34212EB0E4000F0EF1 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		83187C36212EB0E4000F0EF1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		832C14DE2152A3E700290C39 /* ResizableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResizableView.swift; sourceTree = "<group>"; };
 		837E8ECA21450E6C007700BB /* Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library.swift; sourceTree = "<group>"; };
+		83A0558221C1576100CD2AF7 /* Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Helpers.swift; sourceTree = "<group>"; };
+		83A0558421C157E100CD2AF7 /* episodes.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = episodes.json; sourceTree = "<group>"; };
+		83A0558621C157E800CD2AF7 /* thumbs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = thumbs; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,6 +64,8 @@
 		83187C29212EB0E3000F0EF1 /* LabelLayout */ = {
 			isa = PBXGroup;
 			children = (
+				83A0558621C157E800CD2AF7 /* thumbs */,
+				83A0558421C157E100CD2AF7 /* episodes.json */,
 				83187C2A212EB0E3000F0EF1 /* AppDelegate.swift */,
 				837E8ECA21450E6C007700BB /* Library.swift */,
 				83187C2C212EB0E3000F0EF1 /* ViewController.swift */,
@@ -63,6 +73,8 @@
 				83187C31212EB0E4000F0EF1 /* Assets.xcassets */,
 				83187C33212EB0E4000F0EF1 /* LaunchScreen.storyboard */,
 				83187C36212EB0E4000F0EF1 /* Info.plist */,
+				832C14DE2152A3E700290C39 /* ResizableView.swift */,
+				83A0558221C1576100CD2AF7 /* Helpers.swift */,
 			);
 			path = LabelLayout;
 			sourceTree = "<group>";
@@ -125,7 +137,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				83A0558721C157E800CD2AF7 /* thumbs in Resources */,
 				83187C35212EB0E4000F0EF1 /* LaunchScreen.storyboard in Resources */,
+				83A0558521C157E100CD2AF7 /* episodes.json in Resources */,
 				83187C32212EB0E4000F0EF1 /* Assets.xcassets in Resources */,
 				83187C30212EB0E3000F0EF1 /* Main.storyboard in Resources */,
 			);
@@ -140,6 +154,8 @@
 			files = (
 				83187C2D212EB0E3000F0EF1 /* ViewController.swift in Sources */,
 				83187C2B212EB0E3000F0EF1 /* AppDelegate.swift in Sources */,
+				832C14DF2152A3E700290C39 /* ResizableView.swift in Sources */,
+				83A0558321C1576100CD2AF7 /* Helpers.swift in Sources */,
 				837E8ECB21450E6C007700BB /* Library.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
