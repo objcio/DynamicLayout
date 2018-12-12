@@ -41,7 +41,6 @@ let formatter: DateFormatter = {
     return f
 }()
 
-<<<<<<< Updated upstream
 let shortFormatter: DateFormatter = {
     let f = DateFormatter()
     f.dateStyle = .short
@@ -70,7 +69,9 @@ extension Episode {
         white.backgroundColor = .white
         let i = UIImageView(image: UIImage(named: "thumbs/" + small_poster_url.lastPathComponent))
         i.contentMode = .scaleAspectFit
-        let synOrImg = [i.layout(width: .flexible(min: 300), verticalAlignment: .top), synopsis.layout(width: .flexible(min: 300), verticalAlignment: .top)].horizontal(space: .absolute(20))
+        let synOrImg = [i.layout(width: .flexible(min: 300), verticalAlignment: .top), synopsis.layout(width: .flexible(min: 300), verticalAlignment: .top)].horizontal(space: .absolute(20)).or(
+            synopsis.layout(width: .flexible(min: 0))
+        )
         return [title, meta, synOrImg].vertical(space: 10).box(width: .flexible(min: 0), vertical: .top, wrapper: white)
     }
 }
@@ -81,36 +82,12 @@ let episodes: [Episode] = {
     let data = try! Data(contentsOf: url)
     return try! d.decode([Episode].self, from: data)
 }()
-=======
-extension Airport {
-    func layout(title: String) -> Layout {
-        let from = UILabel(text: title, size: .caption1).layout()
-        let code = UILabel(text: self.code, size: .title1).layout()
-        let time = UILabel(text: formatter.string(from: self.time), size: .caption1).layout()
-        
-        return [from, code, time].vertical()
-    }
-}
->>>>>>> Stashed changes
-
 class ViewController: UIViewController {
     var token: Any?
     
     override func viewDidLoad() {
         super.viewDidLoad()
-<<<<<<< Updated upstream
-
-      
         let container = LayoutView(episodes.randomElement()!.layout)
-=======
-        
-        let layout = [
-            sample.origin.layout(title: "FROM"),
-            sample.destination.layout(title: "TO")
-        ].horizontal()
-        
-        let container = LayoutView(layout)
->>>>>>> Stashed changes
         let resizable = ResizableView(frame: .zero, nested: container)
         container.translatesAutoresizingMaskIntoConstraints = false
         view.backgroundColor = UIColor(white: 0.9, alpha: 1)
